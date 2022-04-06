@@ -1,4 +1,5 @@
 from base import Command, Response
+from pb.exchange_pb2 import NewTransactionResponse
 
 
 EXCHANGE_CLA = 0xE0
@@ -70,7 +71,7 @@ class ExchangeResponse(Response):
         if self.code == 0x9000:
             result = "SUCCESS"
         else:
-            result = f"ERROR {ERRORS.get(self.code, 'UNKNOWN')} (0x{self.code.hex()})"
+            result = f"ERROR {ERRORS.get(self.code, 'UNKNOWN')} (0x{hex(self.code)})"
         return "\n< ".join([
             "-"*30,
             result
@@ -111,10 +112,12 @@ class StartTransactionResponse(ExchangeResponse):
             raw_hex_str("TRANSACTION_ID", self.transaction_id)
         ])
 
+
 class StartTransactionCommand(ExchangeCommand):
     @property
     def next(self):
         return StartTransactionResponse
+
 
 class SetPartnerKeyCommand(ExchangeCommand):
     @property
@@ -126,6 +129,7 @@ class SetPartnerKeyCommand(ExchangeCommand):
             raw_hex_str("Partner key", self.partner_key)
         ])
 
+
 class CheckPartnerCommand(ExchangeCommand):
     @property
     def partner_signature(self):
@@ -136,13 +140,20 @@ class CheckPartnerCommand(ExchangeCommand):
             raw_hex_str("Partner signature", self.partner_signature)
         ])
 
+
 class ProcessTransactionCommand(ExchangeCommand):
+    def __init__(self, data):
+        super().__init__(data)
+        assert len(self.data) >= 1 + self.payload_length
+        assert len(self.data) == 1 + self.payload_length + 1 + self.fees_length
+        self._payload = NewTransactionResponse.FromString(self.data[1:1+self.payload_length])
+
     @property
     def payload_length(self):
         return self.data[0]
     @property
     def payload(self):
-        return self.data[1:1+self.payload_length]
+        return self._payload
     @property
     def fees_offset(self):
         return self.payload_length + 2
@@ -155,6 +166,6 @@ class ProcessTransactionCommand(ExchangeCommand):
     def __repr__(self):
         return "\n".join([
             super().__repr__(),
-            raw_hex_str("Payload", self.payload),
+            str(self.payload),
             raw_hex_str("Fees", self.fees)
         ])
