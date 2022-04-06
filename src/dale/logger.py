@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple, Optional
 
-from base import Response, APDUPair
-from exchange import exchange_factory, ExchangeCommand, ExchangeResponse
-from parser import DefaultAPDUParser
+from dale.base import Response, APDUPair
+from dale.exchange import factory as exchange_factory
+from dale.parser import DefaultAPDUParser
 
 
 def init_parser() -> ArgumentParser:
@@ -18,7 +18,7 @@ def init_parser() -> ArgumentParser:
     return parser
 
 
-if __name__ == '__main__':
+def main():
     logging.root.setLevel(logging.INFO)
 
     parser = init_parser()
@@ -34,3 +34,7 @@ if __name__ == '__main__':
 
     for exchange in apdu_parser.conversation:
         print(exchange)
+
+
+if __name__ == '__main__':
+    main()

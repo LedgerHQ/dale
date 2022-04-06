@@ -1,11 +1,10 @@
 import logging
 
 from abc import ABC, abstractmethod
-from base import Command, Response, APDUPair
 from types import TracebackType
 from typing import Optional, Tuple, Type
 
-from base import APDUPair, Command
+from dale.base import APDUPair, Response, Command
 
 
 class APDUParser(ABC):

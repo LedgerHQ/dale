@@ -1,5 +1,6 @@
-from base import Command, Response
-from pb.exchange_pb2 import NewTransactionResponse
+from dale.base import Command, Response
+
+from .pb.exchange_pb2 import NewTransactionResponse
 
 
 EXCHANGE_CLA = 0xE0
@@ -50,7 +51,7 @@ def raw_hex_str(name: str, field: bytes):
     return f"{name}:\n\t{field!r}\n\t{field.hex()}"
 
 
-def exchange_factory(data):
+def factory(data):
     assert data[0] == EXCHANGE_CLA
     assert len(data) > 1
     ins = data[1]
