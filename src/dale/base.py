@@ -2,6 +2,12 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+@dataclass(frozen=True)
+class INS:
+    value: int
+    name: str
+
+
 class Command:
     def __init__(self, data: bytes):
         self.cla = data[0]
@@ -30,8 +36,8 @@ class Response:
 class APDUPair:
     command: Command
     response: Optional[Response]
-    def __repr__(self):
+    def __str__(self):
         return '\n'.join([
-            repr(self.command),
-            repr(self.response) if self.response else 'No response to this command'
+            str(self.command),
+            str(self.response) if self.response else 'No response to this command'
         ])

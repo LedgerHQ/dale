@@ -22,7 +22,7 @@ class DefaultAPDUParser(APDUParser):
     _c = "=>"
     _r = "<="
 
-    def __init__(self, exchange_factory):
+    def __init__(self, exchange_factory: callable):
         super().__init__(exchange_factory)
         self._pending: Optional[Command] = None
         self._conversation = list()
@@ -48,7 +48,7 @@ class DefaultAPDUParser(APDUParser):
             try:
                 self._pending = self._factory(bytes.fromhex(line.split(self._c)[1]))
             except AssertionError as e:
-                logging.exception(e)
+                logging.warning("Unknown command. Ignoring")
                 pass
         elif self.is_response(line):
             data = bytes.fromhex(line.split(self._r)[1])
@@ -56,7 +56,7 @@ class DefaultAPDUParser(APDUParser):
                 pair = APDUPair(self._pending, self._pending.next(data))
                 self._pending = None
             else:
-                logging.warning(f"Unexpected answer\n {Response(data)}")
+                logging.warning("Unexpected answer. Ignoring")
         else:
             logging.warning("Unknown line: %s", line)
 
