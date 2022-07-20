@@ -1,11 +1,12 @@
 from enum import IntEnum
-from base64 import b64decode
+from base64 import b64decode, urlsafe_b64decode
 from typing import Union
 
 from dale.base import Command, Response
 
 from .pb.exchange_pb2 import NewTransactionResponse, NewSellResponse, NewFundResponse
 
+CONFIGURATION_DER_SIGNATURE_LENGTH = 70
 
 EXCHANGE_CLA = 0xE0
 
@@ -88,6 +89,10 @@ def factory(data):
         return CheckPartnerCommand(data)
     elif ins == Ins.PROCESS_TRANSACTION_RESPONSE_COMMAND:
         return ProcessTransactionCommand(data)
+    elif ins == Ins.CHECK_PAYOUT_ADDRESS:
+        return CheckPayoutAddress(data)
+    elif ins == Ins.CHECK_REFUND_ADDRESS:
+        return CheckRefundAddress(data)
     else:
         return ExchangeCommand(data)
 
@@ -97,7 +102,7 @@ class ExchangeResponse(Response):
         if self.code == 0x9000:
             result = "SUCCESS"
         else:
-            result = f"ERROR {ERRORS.get(self.code, 'UNKNOWN')} (0x{hex(self.code)})"
+            result = f"ERROR {ERRORS.get(self.code, 'UNKNOWN')} ({hex(self.code)} - '{ERRORS[self.code]}')"
         return "\n< ".join([
             "-"*30,
             result
@@ -194,17 +199,19 @@ class CheckPartnerCommand(ExchangeCommand):
 class ProcessTransactionCommand(ExchangeCommand):
     def __init__(self, data):
         super().__init__(data)
+        assert len(self.data) >= 1 + self.payload_length
+        assert len(self.data) == 1 + self.payload_length + 1 + self.fees_length
         if self.subcommand == SubCommand.SWAP:
-            assert len(self.data) >= 1 + self.payload_length
-            assert len(self.data) == 1 + self.payload_length + 1 + self.fees_length
             self._payload = NewTransactionResponse.FromString(self.data[1:1+self.payload_length])
         else:
-            assert len(self.data) == 1 + self.payload_length
-            decoded = b64decode(self.data[1:])
+            decoded = urlsafe_b64decode(self.data[1:1+self.payload_length] + b'0')
+            print(decoded)
+            decoded = bytes.fromhex('0A10477265676F722047696C6368726973741216477265676F722047696C636872697374204261616E781A0345544822071A80A85D2454002A2A307832353366623339636265306465346630626432343039613565643539613731653465663164326263322056D4E96A0F95B05D88A0897CDE4AF8248497BCE2834C8919F7DE731B0F04F754')
+            print(decoded)
             if self.subcommand == SubCommand.SELL:
-                self._payload = NewSellResponse(decoded)
+                self._payload = NewSellResponse.FromString(decoded)
             else:  # SubCommand.FUND
-                self.payload = NewFundResponse(decoded)
+                self._payload = NewFundResponse.FromString(decoded)
     @property
     def payload_length(self) -> int:
         return self.data[0]
@@ -231,7 +238,52 @@ class ProcessTransactionCommand(ExchangeCommand):
 class CheckTransactionSignatureCommand(ExchangeCommand):
     def __init__(self, data):
         super().__init__(data)
+        self._signature = self.data
+    @property
+    def signature(self) -> str:
+        return self._signature
+    def __str__(self):
+        return "\n".join([
+            super().__str__(),
+            raw_hex_str("Signature", self.signature)
+        ])
 
-    # def __str__(self):
-    #     return "\n".join([
-    #         super().__str__(),
+class CheckPayoutAddress(ExchangeCommand):
+    def __init__(self, data):
+        super().__init__(data)
+        # gathering configuration
+        assert len(self.data) >= 1
+        size = self.data[0]
+        assert len(self.data) >= size + 1
+        self._configuration = self.data[1:(size + 1)]
+        self.data = self.data[(size + 1):]
+        # gathering DER signature
+        assert len(self.data) >= CONFIGURATION_DER_SIGNATURE_LENGTH
+        assert self.data[0] == 0x30
+        size = self.data[1]
+        self._signature = self.data[:2+size]
+        self.data = self.data[2+size:]
+        # gathering derivation path
+        assert len(self.data) >= 1
+        size = self.data[0]
+        assert len(self.data) == 1 + size
+        self._derivation_path = self.data[1:size]
+    @property
+    def configuration(self) -> str:
+        return self._configuration
+    @property
+    def signature(self) -> str:
+        return self._signature
+    @property
+    def derivation_path(self) -> str:
+        return self._derivation_path
+    def __str__(self):
+        return "\n".join([
+            super().__str__(),
+            raw_hex_str("Configuration", self.configuration),
+            raw_hex_str("Signature", self.signature),
+            raw_hex_str("Derivation path", self.derivation_path),
+        ])
+
+class CheckRefundAddress(ExchangeCommand):
+    pass

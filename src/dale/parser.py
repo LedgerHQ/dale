@@ -48,7 +48,7 @@ class DefaultAPDUParser(APDUParser):
             try:
                 self._pending = self._factory(bytes.fromhex(line.split(self._c)[1]))
             except AssertionError as e:
-                logging.warning("Unknown command. Ignoring")
+                logging.exception(e)
                 pass
         elif self.is_response(line):
             data = bytes.fromhex(line.split(self._r)[1])
