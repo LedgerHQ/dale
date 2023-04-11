@@ -286,4 +286,38 @@ class CheckPayoutAddress(ExchangeCommand):
         ])
 
 class CheckRefundAddress(ExchangeCommand):
-    pass
+    def __init__(self, data):
+        super().__init__(data)
+        # gathering configuration
+        assert len(self.data) >= 1
+        size = self.data[0]
+        assert len(self.data) >= size + 1
+        self._configuration = self.data[1:(size + 1)]
+        self.data = self.data[(size + 1):]
+        # gathering DER signature
+        assert len(self.data) >= CONFIGURATION_DER_SIGNATURE_LENGTH
+        assert self.data[0] == 0x30
+        size = self.data[1]
+        self._signature = self.data[:2+size]
+        self.data = self.data[2+size:]
+        # gathering derivation path
+        assert len(self.data) >= 1
+        size = self.data[0]
+        assert len(self.data) == 1 + size
+        self._derivation_path = self.data[1:size]
+    @property
+    def configuration(self) -> str:
+        return self._configuration
+    @property
+    def signature(self) -> str:
+        return self._signature
+    @property
+    def derivation_path(self) -> str:
+        return self._derivation_path
+    def __str__(self):
+        return "\n".join([
+            super().__str__(),
+            raw_hex_str("Configuration", self.configuration),
+            raw_hex_str("Signature", self.signature),
+            raw_hex_str("Derivation path", self.derivation_path),
+        ])
