@@ -1,6 +1,6 @@
 from enum import IntEnum
 from base64 import b64decode, urlsafe_b64decode
-from typing import Union
+from typing import Union, Any
 
 from dale.base import Command, Response
 
@@ -74,6 +74,23 @@ ERRORS = {
 def raw_hex_str(name: str, field: bytes):
     return f"{name}:\n\t{field!r}\n\t{field.hex()}"
 
+def summary(summary: str):
+    return f"{summary}\n"
+
+def title(title: str):
+    return f"    {title}"
+
+def subtitle(s_title: str):
+    return f"        {s_title}"
+
+def item_str(name: str, field: Any):
+    return f"    {name}: {str(field)}"
+
+def subitem_str(name: str, field: Any):
+    return f"        {name}: {str(field)}"
+
+def subsubitem_str(name: str, field: Any):
+    return f"            {name}: {str(field)}"
 
 def factory(data):
     assert data[0] == EXCHANGE_CLA
@@ -89,10 +106,14 @@ def factory(data):
         return CheckPartnerCommand(data)
     elif ins == Ins.PROCESS_TRANSACTION_RESPONSE_COMMAND:
         return ProcessTransactionCommand(data)
+    elif ins == Ins.CHECK_TRANSACTION_SIGNATURE_COMMAND:
+        return CheckTransactionSignatureCommand(data)
     elif ins == Ins.CHECK_PAYOUT_ADDRESS:
         return CheckPayoutAddress(data)
     elif ins == Ins.CHECK_REFUND_ADDRESS:
         return CheckRefundAddress(data)
+    elif ins == Ins.START_SIGNING_TRANSACTION:
+        return StartSigningTransaction(data)
     else:
         return ExchangeCommand(data)
 
@@ -103,8 +124,9 @@ class ExchangeResponse(Response):
             result = "SUCCESS"
         else:
             result = f"ERROR {ERRORS.get(self.code, 'UNKNOWN')} ({hex(self.code)} - '{ERRORS[self.code]}')"
-        return "\n< ".join([
-            "-"*30,
+        return "\n".join([
+            "-"*45,
+            super().__str__(),
             result
         ])
 
@@ -128,8 +150,9 @@ class ExchangeCommand(Command):
         return ExchangeResponse
     def __str__(self):
         return "\n".join([
-            "="*30,
-            f"> {INS[self.ins]} - {RATE[self.rate]} - {SUBCOMMAND[self.subcommand]}",
+            "="*45,
+            super().__str__(),
+            f"{INS[self.ins]} - {RATE[self.rate]} - {SUBCOMMAND[self.subcommand]}"
         ])
 
 
@@ -164,7 +187,7 @@ class StartNewTransactionResponse(ExchangeResponse):
     def __str__(self):
         return "\n".join([
             super().__str__(),
-            raw_hex_str("TRANSACTION_ID", self.transaction_id)
+            item_str("Transaction ID", self.transaction_id),
         ])
 
 
@@ -172,16 +195,31 @@ class StartNewTransactionCommand(ExchangeCommand):
     @property
     def next(self):
         return StartNewTransactionResponse
+    def __str__(self):
+        return "\n".join([
+            super().__str__(),
+            summary("Starting a new transaction"),
+        ])
 
 
 class SetPartnerKeyCommand(ExchangeCommand):
+    def __init__(self, data):
+        super().__init__(data)
+        self.name_length = self.data[0]
+        self.name = self.data[1:self.name_length+1]
+        self.name = self.data[1:self.name_length+1]
+        self.public_key = self.data[self.name_length+1:]
+
     @property
     def partner_key(self):
         return self.data
     def __str__(self):
         return "\n".join([
             super().__str__(),
-            raw_hex_str("Partner key", self.partner_key)
+            summary("Partner credentials"),
+            item_str("Partner name length", self.name_length),
+            item_str("Partner name", self.name),
+            item_str("Partner public_key", self.public_key.hex())
         ])
 
 
@@ -192,7 +230,8 @@ class CheckPartnerCommand(ExchangeCommand):
     def __str__(self) -> str:
         return "\n".join([
             super().__str__(),
-            raw_hex_str("Partner signature", self.partner_signature)
+            summary("Partner credentials signed by our key"),
+            item_str("Signature", self.data.hex()),
         ])
 
 
@@ -202,16 +241,19 @@ class ProcessTransactionCommand(ExchangeCommand):
         assert len(self.data) >= 1 + self.payload_length
         assert len(self.data) == 1 + self.payload_length + 1 + self.fees_length
         if self.subcommand == SubCommand.SWAP:
-            self._payload = NewTransactionResponse.FromString(self.data[1:1+self.payload_length])
+            self._raw_payload = self.data[1:1+self.payload_length]
+            self._payload = NewTransactionResponse.FromString(self._raw_payload)
         else:
             decoded = urlsafe_b64decode(self.data[1:1+self.payload_length] + b'0')
             print(decoded)
             decoded = bytes.fromhex('0A10477265676F722047696C6368726973741216477265676F722047696C636872697374204261616E781A0345544822071A80A85D2454002A2A307832353366623339636265306465346630626432343039613565643539613731653465663164326263322056D4E96A0F95B05D88A0897CDE4AF8248497BCE2834C8919F7DE731B0F04F754')
             print(decoded)
             if self.subcommand == SubCommand.SELL:
-                self._payload = NewSellResponse.FromString(decoded)
+                self._raw_payload = decoded
+                self._payload = NewSellResponse.FromString(self._raw_payload)
             else:  # SubCommand.FUND
-                self._payload = NewFundResponse.FromString(decoded)
+                self._raw_payload = decoded
+                self._payload = NewFundResponse.FromString(self._raw_payload)
     @property
     def payload_length(self) -> int:
         return self.data[0]
@@ -230,10 +272,20 @@ class ProcessTransactionCommand(ExchangeCommand):
     def __str__(self) -> str:
         return "\n".join([
             super().__str__(),
-            str(self.payload),
-            raw_hex_str("Fees", self.fees)
+            summary("Transaction & fees proposed by the partner"),
+            item_str("Transaction length", self.payload_length),
+            item_str("Transaction raw", self._raw_payload.hex()),
+            subtitle("Transaction details:"),
+            subitem_str("payin_address", self.payload.payin_address),
+            subitem_str("refund_address", self.payload.refund_address),
+            subitem_str("payout_address", self.payload.payout_address),
+            subitem_str("currency_from", self.payload.currency_from),
+            subitem_str("currency_to", self.payload.currency_to),
+            subitem_str("amount_to_provider", int.from_bytes(self.payload.amount_to_provider, 'big')),
+            subitem_str("amount_to_wallet", int.from_bytes(self.payload.amount_to_wallet, 'big')),
+            subitem_str("device_transaction_id", self.payload.device_transaction_id),
+            item_str("Fees", int.from_bytes(self.fees, 'big'))
         ])
-
 
 class CheckTransactionSignatureCommand(ExchangeCommand):
     def __init__(self, data):
@@ -245,7 +297,8 @@ class CheckTransactionSignatureCommand(ExchangeCommand):
     def __str__(self):
         return "\n".join([
             super().__str__(),
-            raw_hex_str("Signature", self.signature)
+            summary("Signature by the partner of the proposed transaction"),
+            item_str("Signature", self.signature.hex())
         ])
 
 class CheckPayoutAddress(ExchangeCommand):
@@ -255,7 +308,26 @@ class CheckPayoutAddress(ExchangeCommand):
         assert len(self.data) >= 1
         size = self.data[0]
         assert len(self.data) >= size + 1
+
         self._configuration = self.data[1:(size + 1)]
+        offset=0
+        self.ticker_length = self._configuration[offset]
+        offset+=1
+        self.ticker = self._configuration[offset:offset + self.ticker_length]
+        offset+=self.ticker_length
+        self.appname_length = self._configuration[offset]
+        offset+=1
+        self.appname = self._configuration[offset:offset + self.appname_length]
+        offset+=self.appname_length
+        self.subconfiguration_length = self._configuration[offset]
+        offset+=1
+        if self.subconfiguration_length > 0:
+            self.subticker_length = self._configuration[offset]
+            offset+=1
+            self.subticker = self._configuration[offset:offset+self.subticker_length]
+            offset+=self.subticker_length
+            self.coefficient = self._configuration[offset]
+
         self.data = self.data[(size + 1):]
         # gathering DER signature
         assert len(self.data) >= CONFIGURATION_DER_SIGNATURE_LENGTH
@@ -280,9 +352,25 @@ class CheckPayoutAddress(ExchangeCommand):
     def __str__(self):
         return "\n".join([
             super().__str__(),
-            raw_hex_str("Configuration", self.configuration),
-            raw_hex_str("Signature", self.signature),
-            raw_hex_str("Derivation path", self.derivation_path),
+            summary("Configuration for TO currency"),
+            item_str("Coin configuration", self.configuration.hex()),
+            subitem_str("Ticker length", self.ticker_length),
+            subitem_str("Ticker", self.ticker.decode()),
+            subitem_str("Application name length", self.appname_length),
+            subitem_str("Application name", self.appname.decode()),
+            subitem_str("Subconfiguration length", self.subconfiguration_length),
+            ])
+        if self.subconfiguration_length > 0:
+            string = "\n".join([
+                string,
+                subsubitem_str("Subticker length", self.subticker_length),
+                subsubitem_str("Subticker", self.subticker.decode()),
+                subsubitem_str("Subconfiguration coefficient", self.coefficient),
+            ])
+        string = "\n".join([
+            string,
+            item_str("Coin configuration signature", self.signature.hex()),
+            item_str("Derivation path", self.derivation_path.hex()),
         ])
 
 class CheckRefundAddress(ExchangeCommand):
@@ -293,6 +381,24 @@ class CheckRefundAddress(ExchangeCommand):
         size = self.data[0]
         assert len(self.data) >= size + 1
         self._configuration = self.data[1:(size + 1)]
+        offset=0
+        self.ticker_length = self._configuration[offset]
+        offset+=1
+        self.ticker = self._configuration[offset:offset + self.ticker_length]
+        offset+=self.ticker_length
+        self.appname_length = self._configuration[offset]
+        offset+=1
+        self.appname = self._configuration[offset:offset + self.appname_length]
+        offset+=self.appname_length
+        self.subconfiguration_length = self._configuration[offset]
+        offset+=1
+        if self.subconfiguration_length > 0:
+            self.subticker_length = self._configuration[offset]
+            offset+=1
+            self.subticker = self._configuration[offset:offset+self.subticker_length]
+            offset+=self.subticker_length
+            self.coefficient = self._configuration[offset]
+
         self.data = self.data[(size + 1):]
         # gathering DER signature
         assert len(self.data) >= CONFIGURATION_DER_SIGNATURE_LENGTH
@@ -315,9 +421,34 @@ class CheckRefundAddress(ExchangeCommand):
     def derivation_path(self) -> str:
         return self._derivation_path
     def __str__(self):
+        string = "\n".join([
+            super().__str__(),
+            summary("Configuration for FROM currency"),
+            item_str("Coin configuration", self.configuration.hex()),
+            subitem_str("Ticker length", self.ticker_length),
+            subitem_str("Ticker", self.ticker.decode()),
+            subitem_str("Application name length", self.appname_length),
+            subitem_str("Application name", self.appname.decode()),
+            subitem_str("Subconfiguration length", self.subconfiguration_length),
+            ])
+        if self.subconfiguration_length > 0:
+            string = "\n".join([
+                string,
+                subsubitem_str("Subticker length", self.subticker_length),
+                subsubitem_str("Subticker", self.subticker.decode()),
+                subsubitem_str("Subconfiguration coefficient", self.coefficient),
+            ])
+        string = "\n".join([
+            string,
+            item_str("Coin configuration signature", self.signature.hex()),
+            item_str("Derivation path", self.derivation_path.hex()),
+        ])
+
+        return string
+
+class StartSigningTransaction(ExchangeCommand):
+    def __str__(self):
         return "\n".join([
             super().__str__(),
-            raw_hex_str("Configuration", self.configuration),
-            raw_hex_str("Signature", self.signature),
-            raw_hex_str("Derivation path", self.derivation_path),
+            summary("Request the start of the paying coin application"),
         ])

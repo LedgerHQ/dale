@@ -35,7 +35,7 @@ def main():
     for exchange in apdu_parser.conversation:
         print(str(exchange))
 
-    print('='*30)
+    print('='*45)
     print('Finished.')
 
 if __name__ == '__main__':
