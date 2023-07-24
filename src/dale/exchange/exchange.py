@@ -2,7 +2,7 @@ from enum import IntEnum
 from base64 import b64decode, urlsafe_b64decode
 from typing import Union, Any
 
-from dale.base import Command, Response
+from dale.base import Command, Response, Factory
 
 from .pb.exchange_pb2 import NewTransactionResponse, NewSellResponse, NewFundResponse
 
@@ -92,30 +92,57 @@ def subitem_str(name: str, field: Any):
 def subsubitem_str(name: str, field: Any):
     return f"            {name}: {str(field)}"
 
-def factory(data):
-    assert data[0] == EXCHANGE_CLA
-    assert len(data) > 1
-    ins = data[1]
-    if ins == Ins.GET_VERSION_COMMAND:
-        return GetVersionCommand(data)
-    if ins == Ins.START_NEW_TRANSACTION_COMMAND:
-        return StartNewTransactionCommand(data)
-    elif ins == Ins.SET_PARTNER_KEY_COMMAND:
-        return SetPartnerKeyCommand(data)
-    elif ins == Ins.CHECK_PARTNER_COMMAND:
-        return CheckPartnerCommand(data)
-    elif ins == Ins.PROCESS_TRANSACTION_RESPONSE_COMMAND:
-        return ProcessTransactionCommand(data)
-    elif ins == Ins.CHECK_TRANSACTION_SIGNATURE_COMMAND:
-        return CheckTransactionSignatureCommand(data)
-    elif ins == Ins.CHECK_PAYOUT_ADDRESS:
-        return CheckPayoutAddress(data)
-    elif ins == Ins.CHECK_REFUND_ADDRESS:
-        return CheckRefundAddress(data)
-    elif ins == Ins.START_SIGNING_TRANSACTION:
-        return StartSigningTransaction(data)
-    else:
-        return ExchangeCommand(data)
+class ExchangeFactory(Factory):
+    def is_recognized(self, data: bytes) -> bool:
+        if data[0] != EXCHANGE_CLA:
+            return False
+        if len(data) <= 1:
+            return False
+        ins = data[1]
+        if ins == Ins.GET_VERSION_COMMAND:
+            return True
+        if ins == Ins.START_NEW_TRANSACTION_COMMAND:
+            return True
+        elif ins == Ins.SET_PARTNER_KEY_COMMAND:
+            return True
+        elif ins == Ins.CHECK_PARTNER_COMMAND:
+            return True
+        elif ins == Ins.PROCESS_TRANSACTION_RESPONSE_COMMAND:
+            return True
+        elif ins == Ins.CHECK_TRANSACTION_SIGNATURE_COMMAND:
+            return True
+        elif ins == Ins.CHECK_PAYOUT_ADDRESS:
+            return True
+        elif ins == Ins.CHECK_REFUND_ADDRESS:
+            return True
+        elif ins == Ins.START_SIGNING_TRANSACTION:
+            return True
+        return False
+
+    def translate_command(self, data: bytes) -> Command:
+        assert data[0] == EXCHANGE_CLA
+        assert len(data) > 1
+        ins = data[1]
+        if ins == Ins.GET_VERSION_COMMAND:
+            return GetVersionCommand(data)
+        if ins == Ins.START_NEW_TRANSACTION_COMMAND:
+            return StartNewTransactionCommand(data)
+        elif ins == Ins.SET_PARTNER_KEY_COMMAND:
+            return SetPartnerKeyCommand(data)
+        elif ins == Ins.CHECK_PARTNER_COMMAND:
+            return CheckPartnerCommand(data)
+        elif ins == Ins.PROCESS_TRANSACTION_RESPONSE_COMMAND:
+            return ProcessTransactionCommand(data)
+        elif ins == Ins.CHECK_TRANSACTION_SIGNATURE_COMMAND:
+            return CheckTransactionSignatureCommand(data)
+        elif ins == Ins.CHECK_PAYOUT_ADDRESS:
+            return CheckPayoutAddress(data)
+        elif ins == Ins.CHECK_REFUND_ADDRESS:
+            return CheckRefundAddress(data)
+        elif ins == Ins.START_SIGNING_TRANSACTION:
+            return StartSigningTransaction(data)
+        else:
+            return ExchangeCommand(data)
 
 
 class ExchangeResponse(Response):
@@ -125,7 +152,6 @@ class ExchangeResponse(Response):
         else:
             result = f"ERROR {ERRORS.get(self.code, 'UNKNOWN')} ({hex(self.code)} - '{ERRORS[self.code]}')"
         return "\n".join([
-            "-"*45,
             super().__str__(),
             result
         ])
@@ -150,7 +176,6 @@ class ExchangeCommand(Command):
         return ExchangeResponse
     def __str__(self):
         return "\n".join([
-            "="*45,
             super().__str__(),
             f"{INS[self.ins]} - {RATE[self.rate]} - {SUBCOMMAND[self.subcommand]}"
         ])

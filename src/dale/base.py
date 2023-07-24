@@ -31,8 +31,10 @@ class Command:
     @property
     def next(self):
         return Response
+
     def __str__(self):
         return "\n".join([
+            "="*80,
             f"=> {self.apdu.hex()}"
         ])
 
@@ -43,8 +45,17 @@ class Response:
         self.data = data[:-2]
     def __str__(self):
         return "\n".join([
+            "-"*80,
             f"<= {self.rapdu.hex()}"
         ])
+
+class Factory:
+    def is_recognized(self, data: bytes) -> bool:
+        return True
+
+    def translate_command(self, data: bytes) -> Command:
+        return Command(data)
+
 
 @dataclass(frozen=True)
 class APDUPair:

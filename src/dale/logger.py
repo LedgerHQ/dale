@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple, Optional
 
-from dale.base import Response, APDUPair
-from dale.exchange import factory as exchange_factory
+from dale.base import Response, APDUPair, Factory
+from dale.exchange import ExchangeFactory
 from dale.parser import DefaultAPDUParser
 
 
@@ -28,7 +28,7 @@ def main():
     logging.info("Reading from %s", apdu_file)
 
     with apdu_file.open() as filee:
-        with DefaultAPDUParser(exchange_factory) as apdu_parser:
+        with DefaultAPDUParser([ExchangeFactory(), Factory()]) as apdu_parser:
             for line in filee:
                 apdu_parser.feed(line)
 
