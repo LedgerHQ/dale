@@ -1,6 +1,6 @@
 from enum import IntEnum
 from base64 import b64decode, urlsafe_b64decode
-from typing import Union, Any
+from typing import Union, Any, Tuple
 from ecdsa import curves
 
 from dale.base import Command, Response, Factory
@@ -52,7 +52,6 @@ RATE = {
     Rate.FLOATING: 'FLOATING'
 }
 
-
 class SubCommand(IntEnum):
     SWAP = 0x00
     SELL = 0x01
@@ -86,26 +85,35 @@ ERRORS = {
 }
 
 
-def raw_hex_str(name: str, field: bytes):
-    return f"{name}:\n\t{field!r}\n\t{field.hex()}"
+
+INDENT="    "
 
 def summary(summary: str):
     return f"{summary}"
 
 def title(title: str):
-    return f"    {title}"
+    return f"{INDENT}{title}"
 
 def subtitle(s_title: str):
-    return f"        {s_title}"
+    return f"{INDENT}{INDENT}{s_title}"
 
 def item_str(name: str, field: Any):
-    return f"    {name}: {str(field)}"
+    return f"{INDENT}{name}: {str(field)}"
 
 def subitem_str(name: str, field: Any):
-    return f"        {name}: {str(field)}"
+    return f"{INDENT}{INDENT}{name}: {str(field)}"
 
 def subsubitem_str(name: str, field: Any):
-    return f"            {name}: {str(field)}"
+    return f"{INDENT}{INDENT}{INDENT}{name}: {str(field)}"
+
+def lv_digest(data: bytes) -> Tuple[int, bytes, bytes]:
+    if len(data) == 0:
+        return (0, b'', b'')
+    size = data[0]
+    return (size, data[1:1+size], data[1+size:])
+
+def l_digest(data: bytes) -> Tuple[int, bytes]:
+    return (data[0], data[1:])
 
 class ExchangeMemory:
     partner_full_credentials: str = None
@@ -252,7 +260,6 @@ class SetPartnerKeyCommand(ExchangeCommand):
         super().__init__(data)
         self.name_length = self.data[0]
         self.name = self.data[1:self.name_length+1]
-        self.name = self.data[1:self.name_length+1]
         self.public_key = self.data[self.name_length+1:]
 
         memory.partner_full_credentials = self.data
@@ -367,45 +374,30 @@ class CheckTransactionSignatureCommand(ExchangeCommand):
             self.sign_check_text,
         ])
 
-class CheckPayoutAddress(ExchangeCommand):
+
+class CheckAddress(ExchangeCommand):
+    summary = None
     def __init__(self, data, memory):
         super().__init__(data)
         # gathering configuration
         assert len(self.data) >= 1
-        size = self.data[0]
-        assert len(self.data) >= size + 1
 
-        self._configuration = self.data[1:(size + 1)]
-        offset=0
-        self.ticker_length = self._configuration[offset]
-        offset+=1
-        self.ticker = self._configuration[offset:offset + self.ticker_length]
-        offset+=self.ticker_length
-        self.appname_length = self._configuration[offset]
-        offset+=1
-        self.appname = self._configuration[offset:offset + self.appname_length]
-        offset+=self.appname_length
-        self.subconfiguration_length = self._configuration[offset]
-        offset+=1
+        self.configuration_length, self._configuration, remaining_apdu = lv_digest(self.data)
+
+        self.ticker_length, self.ticker, remaining_conf = lv_digest(self._configuration)
+        self.appname_length, self.appname, remaining_conf = lv_digest(remaining_conf)
+        self.subconfiguration_length, subconfig, remaining_conf = lv_digest(remaining_conf)
+        assert remaining_conf == b''  # ?
         if self.subconfiguration_length > 0:
-            self.subticker_length = self._configuration[offset]
-            offset+=1
-            self.subticker = self._configuration[offset:offset+self.subticker_length]
-            offset+=self.subticker_length
-            self.coefficient = self._configuration[offset]
+            self.subticker_length, self.subticker, remaining_subconf = lv_digest(subconfig)
+            self.coefficient, remaining_subconf = l_digest(remaining_subconf)
+            assert remaining_subconf == b''  # ?
 
-        self.data = self.data[(size + 1):]
-        # gathering DER signature
-        assert len(self.data) >= CONFIGURATION_DER_SIGNATURE_LENGTH
-        assert self.data[0] == 0x30
-        size = self.data[1]
-        self._signature = self.data[:2+size]
-        self.data = self.data[2+size:]
-        # gathering derivation path
-        assert len(self.data) >= 1
-        size = self.data[0]
-        assert len(self.data) == 1 + size
-        self._derivation_path = self.data[1:size]
+        self.signature_header, remaining_apdu = l_digest(remaining_apdu)
+        self.signature_length, self._signature, remaining_apdu = lv_digest(remaining_apdu)
+
+        self.derivation_path_length, self._derivation_path, remaining_apdu = lv_digest(remaining_apdu)
+
     @property
     def configuration(self) -> str:
         return self._configuration
@@ -416,10 +408,11 @@ class CheckPayoutAddress(ExchangeCommand):
     def derivation_path(self) -> str:
         return self._derivation_path
     def __str__(self):
-        return "\n".join([
+        string = "\n".join([
             super().__str__(),
-            summary("Configuration for TO currency"),
+            summary(self.summary),
             "",
+            item_str("Coin configuration length", self.configuration_length),
             item_str("Coin configuration", self.configuration.hex()),
             subitem_str("Ticker length", self.ticker_length),
             subitem_str("Ticker", self.ticker.decode()),
@@ -436,83 +429,24 @@ class CheckPayoutAddress(ExchangeCommand):
             ])
         string = "\n".join([
             string,
-            item_str("Coin configuration signature", self.signature.hex()),
-            item_str("Derivation path", self.derivation_path.hex()),
-        ])
-
-class CheckRefundAddress(ExchangeCommand):
-    def __init__(self, data, memory):
-        super().__init__(data)
-        # gathering configuration
-        assert len(self.data) >= 1
-        size = self.data[0]
-        assert len(self.data) >= size + 1
-        self._configuration = self.data[1:(size + 1)]
-        offset=0
-        self.ticker_length = self._configuration[offset]
-        offset+=1
-        self.ticker = self._configuration[offset:offset + self.ticker_length]
-        offset+=self.ticker_length
-        self.appname_length = self._configuration[offset]
-        offset+=1
-        self.appname = self._configuration[offset:offset + self.appname_length]
-        offset+=self.appname_length
-        self.subconfiguration_length = self._configuration[offset]
-        offset+=1
-        if self.subconfiguration_length > 0:
-            self.subticker_length = self._configuration[offset]
-            offset+=1
-            self.subticker = self._configuration[offset:offset+self.subticker_length]
-            offset+=self.subticker_length
-            self.coefficient = self._configuration[offset]
-
-        self.data = self.data[(size + 1):]
-        # gathering DER signature
-        assert len(self.data) >= CONFIGURATION_DER_SIGNATURE_LENGTH
-        assert self.data[0] == 0x30
-        size = self.data[1]
-        self._signature = self.data[:2+size]
-        self.data = self.data[2+size:]
-        # gathering derivation path
-        assert len(self.data) >= 1
-        size = self.data[0]
-        assert len(self.data) == 1 + size
-        self._derivation_path = self.data[1:size]
-    @property
-    def configuration(self) -> str:
-        return self._configuration
-    @property
-    def signature(self) -> str:
-        return self._signature
-    @property
-    def derivation_path(self) -> str:
-        return self._derivation_path
-    def __str__(self):
-        string = "\n".join([
-            super().__str__(),
-            summary("Configuration for FROM currency"),
             "",
-            item_str("Coin configuration", self.configuration.hex()),
-            subitem_str("Ticker length", self.ticker_length),
-            subitem_str("Ticker", self.ticker.decode()),
-            subitem_str("Application name length", self.appname_length),
-            subitem_str("Application name", self.appname.decode()),
-            subitem_str("Subconfiguration length", self.subconfiguration_length),
-            ])
-        if self.subconfiguration_length > 0:
-            string = "\n".join([
-                string,
-                subsubitem_str("Subticker length", self.subticker_length),
-                subsubitem_str("Subticker", self.subticker.decode()),
-                subsubitem_str("Subconfiguration coefficient", self.coefficient),
-            ])
-        string = "\n".join([
-            string,
+            item_str("Coin configuration signature header", self.signature_header),
+            item_str("Coin configuration signature length", self.signature_length),
             item_str("Coin configuration signature", self.signature.hex()),
+            "",
+            item_str("Derivation path length", self.derivation_path_length),
             item_str("Derivation path", self.derivation_path.hex()),
         ])
-
         return string
+
+
+class CheckPayoutAddress(CheckAddress):
+    summary = "Configuration for TO currency"
+
+
+class CheckRefundAddress(CheckAddress):
+    summary = "Configuration for FROM currency"
+
 
 class StartSigningTransaction(ExchangeCommand):
     def __str__(self):

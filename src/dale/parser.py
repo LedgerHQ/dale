@@ -2,14 +2,14 @@ import logging
 
 from abc import ABC, abstractmethod
 from types import TracebackType
-from typing import Optional, Tuple, Type
+from typing import Optional, Tuple, Type, List
 
 from dale.base import APDUPair, Response, Command, Factory
 from dale.exchange import ExchangeFactory
 
 
 class APDUParser(ABC):
-    def __init__(self, factories: Factory):
+    def __init__(self, factories: List[Factory]):
         self._factories = factories
     @abstractmethod
     def is_command(self, line) -> bool:
@@ -22,7 +22,7 @@ class DefaultAPDUParser(APDUParser):
     _c = "=>"
     _r = "<="
 
-    def __init__(self, factories: Factory):
+    def __init__(self, factories: List[Factory]):
         super().__init__(factories)
         self._pending: Optional[Command] = None
         self._conversation = list()
