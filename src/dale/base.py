@@ -21,10 +21,7 @@ class Command:
         else:
             self.len = apdu[4]
 
-        if self.len == 0:
-            self.data = b''
-        else:
-            self.data = apdu[5:]
+        self.data = apdu[5:]
 
         assert len(self.data) == self.len
 
@@ -50,7 +47,7 @@ class Response:
         ])
 
 class Factory:
-    def is_recognized(self, data: bytes) -> bool:
+    def is_recognized(self, data: bytes, last_one_recognized: bool) -> bool:
         return True
 
     def translate_command(self, data: bytes) -> Command:

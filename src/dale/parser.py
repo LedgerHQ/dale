@@ -26,6 +26,7 @@ class DefaultAPDUParser(APDUParser):
         super().__init__(factories)
         self._pending: Optional[Command] = None
         self._conversation = list()
+        self._last_factory = None
 
     @property
     def conversation(self) -> Tuple[APDUPair]:
@@ -48,7 +49,8 @@ class DefaultAPDUParser(APDUParser):
             try:
                 data = bytes.fromhex(line.split(self._c)[1])
                 for f in self._factories:
-                    if f.is_recognized(data=data):
+                    if f.is_recognized(data=data, last_one_recognized = (self._last_factory == f)):
+                        self._last_factory = f
                         self._pending = f.translate_command(data=data)
                         break
             except AssertionError as e:
