@@ -2,14 +2,15 @@ import logging
 
 from abc import ABC, abstractmethod
 from types import TracebackType
-from typing import Optional, Tuple, Type
+from typing import Optional, Tuple, Type, List
 
-from dale.base import APDUPair, Response, Command
+from dale.base import APDUPair, Response, Command, Factory
+from dale.exchange import ExchangeFactory
 
 
 class APDUParser(ABC):
-    def __init__(self, factory):
-        self._factory = factory
+    def __init__(self, factories: List[Factory]):
+        self._factories = factories
     @abstractmethod
     def is_command(self, line) -> bool:
         pass
@@ -17,15 +18,15 @@ class APDUParser(ABC):
     def is_response(self, line) -> bool:
         pass
 
-
 class DefaultAPDUParser(APDUParser):
     _c = "=>"
     _r = "<="
 
-    def __init__(self, exchange_factory: callable):
-        super().__init__(exchange_factory)
+    def __init__(self, factories: List[Factory]):
+        super().__init__(factories)
         self._pending: Optional[Command] = None
         self._conversation = list()
+        self._last_factory = None
 
     @property
     def conversation(self) -> Tuple[APDUPair]:
@@ -46,7 +47,12 @@ class DefaultAPDUParser(APDUParser):
             if self._pending:
                 pair = APDUPair(self._pending, None)
             try:
-                self._pending = self._factory(bytes.fromhex(line.split(self._c)[1]))
+                data = bytes.fromhex(line.split(self._c)[1])
+                for f in self._factories:
+                    if f.is_recognized(data=data, last_one_recognized = (self._last_factory == f)):
+                        self._last_factory = f
+                        self._pending = f.translate_command(data=data)
+                        break
             except AssertionError as e:
                 logging.exception(e)
                 pass

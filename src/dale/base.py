@@ -9,28 +9,50 @@ class INS:
 
 
 class Command:
-    def __init__(self, data: bytes):
-        self.cla = data[0]
-        self.ins = data[1]
-        self.p1 = data[2]
-        self.p2 = data[3]
-        if len(data) == 4:
+    def __init__(self, apdu: bytes):
+        self.apdu = apdu
+        self.cla = apdu[0]
+        self.ins = apdu[1]
+        self.p1 = apdu[2]
+        self.p2 = apdu[3]
+
+        if len(apdu) == 4:
             self.len = 0
         else:
-            self.len = data[4]
-        if self.len == 0:
-            self.data = b''
-        else:
-            self.data = data[5:]
+            self.len = apdu[4]
+
+        self.data = apdu[5:]
+
         assert len(self.data) == self.len
+
     @property
     def next(self):
         return Response
 
+    def __str__(self):
+        return "\n".join([
+            "="*80,
+            f"=> {self.apdu.hex()}"
+        ])
+
 class Response:
     def __init__(self, data: bytes):
+        self.rapdu = data
         self.code = int.from_bytes(data[-2:], 'big')
         self.data = data[:-2]
+    def __str__(self):
+        return "\n".join([
+            "-"*80,
+            f"<= {self.rapdu.hex()}"
+        ])
+
+class Factory:
+    def is_recognized(self, data: bytes, last_one_recognized: bool) -> bool:
+        return True
+
+    def translate_command(self, data: bytes) -> Command:
+        return Command(data)
+
 
 @dataclass(frozen=True)
 class APDUPair:

@@ -1,1 +1,1 @@
-from .exchange import factory
+from .exchange import ExchangeFactory
