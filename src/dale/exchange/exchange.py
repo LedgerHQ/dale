@@ -1,3 +1,4 @@
+import struct
 from enum import IntEnum
 from base64 import b64decode, urlsafe_b64decode
 from typing import Union, Any, Tuple
@@ -21,6 +22,7 @@ class Ins(IntEnum):
     PROCESS_TRANSACTION_RESPONSE_COMMAND = 0x06
     CHECK_TRANSACTION_SIGNATURE_COMMAND  = 0x07
     CHECK_PAYOUT_ADDRESS                 = 0x08
+    CHECK_ASSET_IN                       = 0x0B
     CHECK_REFUND_ADDRESS                 = 0x09
     START_SIGNING_TRANSACTION            = 0x0A
 
@@ -39,6 +41,7 @@ INS = {
     Ins.PROCESS_TRANSACTION_RESPONSE_COMMAND: 'PROCESS_TRANSACTION_RESPONSE_COMMAND',
     Ins.CHECK_TRANSACTION_SIGNATURE_COMMAND:  'CHECK_TRANSACTION_SIGNATURE_COMMAND',
     Ins.CHECK_PAYOUT_ADDRESS:                 'CHECK_PAYOUT_ADDRESS',
+    Ins.CHECK_ASSET_IN:                       'CHECK_ASSET_IN',
     Ins.CHECK_REFUND_ADDRESS:                 'CHECK_REFUND_ADDRESS',
     Ins.START_SIGNING_TRANSACTION:            'START_SIGNING_TRANSACTION'
 }
@@ -53,20 +56,54 @@ RATE = {
 }
 
 class SubCommand(IntEnum):
-    SWAP = 0x00
-    SELL = 0x01
-    FUND = 0x02
+    SWAP    = 0x00
+    SELL    = 0x01
+    FUND    = 0x02
+    SWAP_NG = 0x03
+    SELL_NG = 0x04
+    FUND_NG = 0x05
+
+SUBCOMMAND_MASK = 0x0F
 
 SUBCOMMAND_TO_TEXT = {
     SubCommand.SWAP: 'SWAP',
     SubCommand.SELL: 'SELL',
-    SubCommand.FUND: 'FUND'
+    SubCommand.FUND: 'FUND',
+    SubCommand.SWAP_NG: 'SWAP_NG',
+    SubCommand.SELL_NG: 'SELL_NG',
+    SubCommand.FUND_NG: 'FUND_NG',
 }
 
 SUBCOMMAND_TO_CURVE = {
     SubCommand.SWAP: curves.SECP256k1,
     SubCommand.SELL: curves.NIST256p, # == SECP256r1
     SubCommand.FUND: curves.NIST256p, # == SECP256r1
+    SubCommand.SWAP_NG: curves.NIST256p,
+    SubCommand.SELL_NG: curves.NIST256p,
+    SubCommand.FUND_NG: curves.NIST256p,
+}
+
+SUBCOMMAND_TO_SIZE_OF_PAYLOAD_LENGTH_FIELD = {
+    SubCommand.SWAP: 1,
+    SubCommand.SELL: 1,
+    SubCommand.FUND: 1,
+    SubCommand.SWAP_NG: 2,
+    SubCommand.SELL_NG: 2,
+    SubCommand.FUND_NG: 2,
+}
+
+class Extension(IntEnum):
+    P2_NONE   = (0x00 << 4)
+    P2_EXTEND = (0x01 << 4)
+    P2_MORE   = (0x02 << 4)
+
+EXTENSION_MASK = 0xF0
+
+EXTENSION_TO_TEXT = {
+    Extension.P2_NONE: 'P2_NONE',
+    Extension.P2_EXTEND: 'P2_EXTEND',
+    Extension.P2_MORE: 'P2_MORE',
+    Extension.P2_MORE | Extension.P2_EXTEND: 'P2_MORE & P2_EXTEND',
 }
 
 
@@ -78,10 +115,15 @@ ERRORS = {
     0x6A84: "USER_REFUSED",
     0x6A85: "INTERNAL_ERROR",
     0x6A86: "WRONG_P1",
-    0x6A87: "WRONG_P2",
+    0x6A87: "WRONG_P2_SUBCOMMAND",
+    0x6A88: "WRONG_P2_EXTENSION",
+    0x6A89: "INVALID_P2_EXTENSION",
     0x6E00: "CLASS_NOT_SUPPORTED",
+    0x6E01: "MALFORMED_APDU",
+    0x6E02: "INVALID_DATA_LENGTH",
     0x6D00: "INVALID_INSTRUCTION",
-    0x9D1A: "SIGN_VERIFICATION_FAIL"
+    0x6D01: "UNEXPECTED_INSTRUCTION",
+    0x9D1A: "SIGN_VERIFICATION_FAIL",
 }
 
 
@@ -118,11 +160,15 @@ def l_digest(data: bytes) -> Tuple[int, bytes]:
 class ExchangeMemory:
     partner_full_credentials: str = None
     partner_public_key: str = None
+    reconstructed_data: str = None
+    transaction_length: str = None
     transaction: str = None
 
     def reset(self):
         partner_full_credentials = None
         partner_public_key = None
+        reconstructed_data = None
+        transaction_length = None
         transaction = None
 
 
@@ -164,6 +210,8 @@ class ExchangeFactory(Factory):
             return CheckPayoutAddress(data, self.memory)
         elif ins == Ins.CHECK_REFUND_ADDRESS:
             return CheckRefundAddress(data, self.memory)
+        elif ins == Ins.CHECK_ASSET_IN:
+            return CheckAssetIn(data, self.memory)
         elif ins == Ins.START_SIGNING_TRANSACTION:
             return StartSigningTransaction(data, self.memory)
         else:
@@ -190,19 +238,27 @@ class ExchangeCommand(Command):
         assert self.ins in INS
         assert self.rate in RATE
         assert self.subcommand in SUBCOMMAND_TO_TEXT
+
     @property
     def rate(self):
         return self.p1
+
     @property
     def subcommand(self):
-        return self.p2
+        return self.p2 & SUBCOMMAND_MASK
+
+    @property
+    def extension(self):
+        return self.p2 & EXTENSION_MASK
+
     @property
     def next(self):
         return ExchangeResponse
+
     def __str__(self):
         return "\n".join([
             super().__str__(),
-            f"{INS[self.ins]} - {RATE[self.rate]} - {SUBCOMMAND_TO_TEXT[self.subcommand]}"
+            f"{INS[self.ins]} - {RATE[self.rate]} - {SUBCOMMAND_TO_TEXT[self.subcommand]} - {EXTENSION_TO_TEXT[self.extension]}"
         ])
 
 
@@ -500,6 +556,10 @@ class CheckAddress(ExchangeCommand):
 
 
 class CheckPayoutAddress(CheckAddress):
+    summary = "Configuration for TO currency"
+
+
+class CheckAssetIn(CheckAddress):
     summary = "Configuration for TO currency"
 
 
