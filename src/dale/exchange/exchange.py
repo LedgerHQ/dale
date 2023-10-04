@@ -1,7 +1,7 @@
 import struct
 from enum import IntEnum
 from base64 import b64decode, urlsafe_b64decode
-from typing import Union, Any, Tuple
+from typing import Union, Any, Tuple, Optional
 from ecdsa import curves
 
 from dale.base import Command, Response, Factory
@@ -231,7 +231,7 @@ class ExchangeResponse(Response):
 
 
 class ExchangeCommand(Command):
-    def __init__(self, data, memory = None):
+    def __init__(self, data: str, memory: Optional[ExchangeMemory] = None):
         assert data[0] == EXCHANGE_CLA, \
             f"This question with CLA '{hex(data[0])}' is not for the Exchange application"
         super().__init__(data)
@@ -299,7 +299,7 @@ class StartNewTransactionResponse(ExchangeResponse):
 
 
 class StartNewTransactionCommand(ExchangeCommand):
-    def __init__(self, data, memory):
+    def __init__(self, data: str, memory: ExchangeMemory):
         super().__init__(data)
         memory.reset()
     @property
@@ -313,7 +313,7 @@ class StartNewTransactionCommand(ExchangeCommand):
 
 
 class SetPartnerKeyCommand(ExchangeCommand):
-    def __init__(self, data, memory):
+    def __init__(self, data: str, memory: ExchangeMemory):
         super().__init__(data)
         self.name_length = self.data[0]
         self.name = self.data[1:self.name_length+1]
@@ -337,7 +337,7 @@ class SetPartnerKeyCommand(ExchangeCommand):
 
 
 class CheckPartnerCommand(ExchangeCommand):
-    def __init__(self, data, memory):
+    def __init__(self, data: str, memory: ExchangeMemory):
         super().__init__(data)
         if signature_tester.check_ledger_prod_signature(memory.partner_full_credentials, self.data):
             self.sign_check_text = "    (Valid signature of the partner credentials by the Ledger PROD key)"
@@ -359,7 +359,7 @@ class CheckPartnerCommand(ExchangeCommand):
         ])
 
 class ProcessTransactionCommand(ExchangeCommand):
-    def __init__(self, data, memory):
+    def __init__(self, data: str, memory: ExchangeMemory):
         super().__init__(data)
         if self.extension & Extension.P2_EXTEND:
             memory.reconstructed_data += self.data
@@ -383,19 +383,19 @@ class ProcessTransactionCommand(ExchangeCommand):
     @property
     def size_of_payload_length_field(self) -> int:
         return SUBCOMMAND_TO_SIZE_OF_PAYLOAD_LENGTH_FIELD[self.subcommand]
-    @property
-    def decoded_payload(self) -> Union[NewTransactionResponse, NewSellResponse, NewFundResponse]:
+
+    def decode_pb(self):
         if self.subcommand == SubCommand.SWAP:
             decoded = self.payload
-            return NewTransactionResponse.FromString(decoded)
+            self.decoded_payload = NewTransactionResponse.FromString(decoded)
         else:
             decoded = urlsafe_b64decode(self.payload)
             if self.subcommand == SubCommand.SELL or self.subcommand == SubCommand.SELL_NG:
-                return NewSellResponse.FromString(decoded)
+                self.decoded_payload = NewSellResponse.FromString(decoded)
             elif self.subcommand == SubCommand.FUND or self.subcommand == SubCommand.FUND_NG:
-                return NewFundResponse.FromString(decoded)
+                self.decoded_payload = NewFundResponse.FromString(decoded)
             else:  # SubCommand.SWAP_NG
-                return NewTransactionResponse.FromString(decoded)
+                self.decoded_payload = NewTransactionResponse.FromString(decoded)
 
     @property
     def summary_str(self) -> str:
@@ -453,6 +453,7 @@ class ProcessTransactionCommand(ExchangeCommand):
                 item_str("Current transaction raw", self.current_raw_reception.hex()),
             ])
         else:
+            self.decode_pb()
             return "\n".join([
                 super().__str__(),
                 summary(self.summary_str),
@@ -466,7 +467,7 @@ class ProcessTransactionCommand(ExchangeCommand):
             ])
 
 class CheckTransactionSignatureCommand(ExchangeCommand):
-    def __init__(self, data, memory):
+    def __init__(self, data: str, memory: ExchangeMemory):
         super().__init__(data)
         self._signature = self.data
         message = memory.transaction
@@ -492,7 +493,7 @@ class CheckTransactionSignatureCommand(ExchangeCommand):
 
 class CheckAddress(ExchangeCommand):
     summary = None
-    def __init__(self, data, memory):
+    def __init__(self, data: str, memory: ExchangeMemory):
         super().__init__(data)
         # gathering configuration
         assert len(self.data) >= 1
