@@ -20,7 +20,7 @@ def check_ledger_prod_signature(message, signature) -> bool:
 	return _check_signature(LEDGER_PUBLIC_KEY_PROD, message, signature, curves.SECP256k1)
 
 def check_ledger_test_signature(message, signature) -> bool:
-	return _check_signature(LEDGER_PUBLIC_KEY_PROD, message, signature, curves.SECP256k1)
+	return _check_signature(LEDGER_PUBLIC_KEY_TEST, message, signature, curves.SECP256k1)
 
 def check_partner_signature(partner_key, message, signature, curve) -> bool:
 	return _check_signature(partner_key, message, signature, curve)

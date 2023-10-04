@@ -1,3 +1,4 @@
+import struct
 from enum import IntEnum
 from base64 import b64decode, urlsafe_b64decode
 from typing import Union, Any, Tuple
@@ -21,6 +22,7 @@ class Ins(IntEnum):
     PROCESS_TRANSACTION_RESPONSE_COMMAND = 0x06
     CHECK_TRANSACTION_SIGNATURE_COMMAND  = 0x07
     CHECK_PAYOUT_ADDRESS                 = 0x08
+    CHECK_ASSET_IN                       = 0x0B
     CHECK_REFUND_ADDRESS                 = 0x09
     START_SIGNING_TRANSACTION            = 0x0A
 
@@ -39,6 +41,7 @@ INS = {
     Ins.PROCESS_TRANSACTION_RESPONSE_COMMAND: 'PROCESS_TRANSACTION_RESPONSE_COMMAND',
     Ins.CHECK_TRANSACTION_SIGNATURE_COMMAND:  'CHECK_TRANSACTION_SIGNATURE_COMMAND',
     Ins.CHECK_PAYOUT_ADDRESS:                 'CHECK_PAYOUT_ADDRESS',
+    Ins.CHECK_ASSET_IN:                       'CHECK_ASSET_IN',
     Ins.CHECK_REFUND_ADDRESS:                 'CHECK_REFUND_ADDRESS',
     Ins.START_SIGNING_TRANSACTION:            'START_SIGNING_TRANSACTION'
 }
@@ -53,20 +56,54 @@ RATE = {
 }
 
 class SubCommand(IntEnum):
-    SWAP = 0x00
-    SELL = 0x01
-    FUND = 0x02
+    SWAP    = 0x00
+    SELL    = 0x01
+    FUND    = 0x02
+    SWAP_NG = 0x03
+    SELL_NG = 0x04
+    FUND_NG = 0x05
+
+SUBCOMMAND_MASK = 0x0F
 
 SUBCOMMAND_TO_TEXT = {
     SubCommand.SWAP: 'SWAP',
     SubCommand.SELL: 'SELL',
-    SubCommand.FUND: 'FUND'
+    SubCommand.FUND: 'FUND',
+    SubCommand.SWAP_NG: 'SWAP_NG',
+    SubCommand.SELL_NG: 'SELL_NG',
+    SubCommand.FUND_NG: 'FUND_NG',
 }
 
 SUBCOMMAND_TO_CURVE = {
     SubCommand.SWAP: curves.SECP256k1,
     SubCommand.SELL: curves.NIST256p, # == SECP256r1
     SubCommand.FUND: curves.NIST256p, # == SECP256r1
+    SubCommand.SWAP_NG: curves.NIST256p,
+    SubCommand.SELL_NG: curves.NIST256p,
+    SubCommand.FUND_NG: curves.NIST256p,
+}
+
+SUBCOMMAND_TO_SIZE_OF_PAYLOAD_LENGTH_FIELD = {
+    SubCommand.SWAP: 1,
+    SubCommand.SELL: 1,
+    SubCommand.FUND: 1,
+    SubCommand.SWAP_NG: 2,
+    SubCommand.SELL_NG: 2,
+    SubCommand.FUND_NG: 2,
+}
+
+class Extension(IntEnum):
+    P2_NONE   = (0x00 << 4)
+    P2_EXTEND = (0x01 << 4)
+    P2_MORE   = (0x02 << 4)
+
+EXTENSION_MASK = 0xF0
+
+EXTENSION_TO_TEXT = {
+    Extension.P2_NONE: 'P2_NONE',
+    Extension.P2_EXTEND: 'P2_EXTEND',
+    Extension.P2_MORE: 'P2_MORE',
+    Extension.P2_MORE | Extension.P2_EXTEND: 'P2_MORE & P2_EXTEND',
 }
 
 
@@ -78,10 +115,15 @@ ERRORS = {
     0x6A84: "USER_REFUSED",
     0x6A85: "INTERNAL_ERROR",
     0x6A86: "WRONG_P1",
-    0x6A87: "WRONG_P2",
+    0x6A87: "WRONG_P2_SUBCOMMAND",
+    0x6A88: "WRONG_P2_EXTENSION",
+    0x6A89: "INVALID_P2_EXTENSION",
     0x6E00: "CLASS_NOT_SUPPORTED",
+    0x6E01: "MALFORMED_APDU",
+    0x6E02: "INVALID_DATA_LENGTH",
     0x6D00: "INVALID_INSTRUCTION",
-    0x9D1A: "SIGN_VERIFICATION_FAIL"
+    0x6D01: "UNEXPECTED_INSTRUCTION",
+    0x9D1A: "SIGN_VERIFICATION_FAIL",
 }
 
 
@@ -118,11 +160,15 @@ def l_digest(data: bytes) -> Tuple[int, bytes]:
 class ExchangeMemory:
     partner_full_credentials: str = None
     partner_public_key: str = None
+    reconstructed_data: str = None
+    transaction_length: str = None
     transaction: str = None
 
     def reset(self):
         partner_full_credentials = None
         partner_public_key = None
+        reconstructed_data = None
+        transaction_length = None
         transaction = None
 
 
@@ -164,6 +210,8 @@ class ExchangeFactory(Factory):
             return CheckPayoutAddress(data, self.memory)
         elif ins == Ins.CHECK_REFUND_ADDRESS:
             return CheckRefundAddress(data, self.memory)
+        elif ins == Ins.CHECK_ASSET_IN:
+            return CheckAssetIn(data, self.memory)
         elif ins == Ins.START_SIGNING_TRANSACTION:
             return StartSigningTransaction(data, self.memory)
         else:
@@ -190,19 +238,27 @@ class ExchangeCommand(Command):
         assert self.ins in INS
         assert self.rate in RATE
         assert self.subcommand in SUBCOMMAND_TO_TEXT
+
     @property
     def rate(self):
         return self.p1
+
     @property
     def subcommand(self):
-        return self.p2
+        return self.p2 & SUBCOMMAND_MASK
+
+    @property
+    def extension(self):
+        return self.p2 & EXTENSION_MASK
+
     @property
     def next(self):
         return ExchangeResponse
+
     def __str__(self):
         return "\n".join([
             super().__str__(),
-            f"{INS[self.ins]} - {RATE[self.rate]} - {SUBCOMMAND_TO_TEXT[self.subcommand]}"
+            f"{INS[self.ins]} - {RATE[self.rate]} - {SUBCOMMAND_TO_TEXT[self.subcommand]} - {EXTENSION_TO_TEXT[self.extension]}"
         ])
 
 
@@ -302,63 +358,121 @@ class CheckPartnerCommand(ExchangeCommand):
             self.sign_check_text,
         ])
 
-
 class ProcessTransactionCommand(ExchangeCommand):
     def __init__(self, data, memory):
         super().__init__(data)
-        assert len(self.data) >= 1 + self.payload_length
-        assert len(self.data) == 1 + self.payload_length + 1 + self.fees_length
-        self._raw_payload = self.data[1:1+self.payload_length]
-        if self.subcommand == SubCommand.SWAP:
-            decoded = self._raw_payload
-            self._payload = NewTransactionResponse.FromString(decoded)
+        if self.extension & Extension.P2_EXTEND:
+            memory.reconstructed_data += self.data
         else:
-            decoded = urlsafe_b64decode(self._raw_payload)
-            if self.subcommand == SubCommand.SELL:
-                self._payload = NewSellResponse.FromString(decoded)
-            else:  # SubCommand.FUND
-                self._payload = NewFundResponse.FromString(decoded)
-        memory.transaction = self._raw_payload
+            memory.reconstructed_data = self.data
+            if self.size_of_payload_length_field == 1:
+                memory.transaction_length = memory.reconstructed_data[0]
+            elif self.size_of_payload_length_field == 2:
+                memory.transaction_length = struct.unpack(">H", memory.reconstructed_data[0:2])[0]
+
+        self.payload_length = memory.transaction_length
+        self.current_raw_reception = memory.reconstructed_data
+
+        if not self.extension & Extension.P2_MORE:
+            self.payload = memory.reconstructed_data[self.size_of_payload_length_field:self.size_of_payload_length_field + memory.transaction_length]
+            memory.transaction = self.payload
+            fees_offset = self.size_of_payload_length_field + memory.transaction_length
+            self.fees_length = memory.reconstructed_data[fees_offset]
+            self.fees = memory.reconstructed_data[fees_offset + 1:fees_offset + 1 + self.fees_length]
 
     @property
-    def payload_length(self) -> int:
-        return self.data[0]
+    def size_of_payload_length_field(self) -> int:
+        return SUBCOMMAND_TO_SIZE_OF_PAYLOAD_LENGTH_FIELD[self.subcommand]
     @property
-    def payload(self) -> Union[NewTransactionResponse, NewSellResponse, NewFundResponse]:
-        return self._payload
+    def decoded_payload(self) -> Union[NewTransactionResponse, NewSellResponse, NewFundResponse]:
+        if self.subcommand == SubCommand.SWAP:
+            decoded = self.payload
+            return NewTransactionResponse.FromString(decoded)
+        else:
+            decoded = urlsafe_b64decode(self.payload)
+            if self.subcommand == SubCommand.SELL or self.subcommand == SubCommand.SELL_NG:
+                return NewSellResponse.FromString(decoded)
+            elif self.subcommand == SubCommand.FUND or self.subcommand == SubCommand.FUND_NG:
+                return NewFundResponse.FromString(decoded)
+            else:  # SubCommand.SWAP_NG
+                return NewTransactionResponse.FromString(decoded)
+
     @property
-    def fees_offset(self) -> int:
-        return self.payload_length + 2
+    def summary_str(self) -> str:
+        suffix = "Transaction & fees proposed by the partner"
+        if self.extension & Extension.P2_EXTEND:
+            suffix += ", appending to previously received APDU"
+        if self.extension & Extension.P2_MORE:
+            suffix += ", expecting more APDU"
+        return suffix
+
     @property
-    def fees_length(self) -> int:
-        return self.data[self.fees_offset - 1]
-    @property
-    def fees(self) -> bytes:
-        return self.data[self.fees_offset:self.fees_offset + self.fees_length]
+    def decoded_pb(self) -> str:
+        if self.subcommand == SubCommand.SWAP or self.subcommand == SubCommand.SWAP_NG:
+            ret = "\n".join([
+                subitem_str("payin_address", self.decoded_payload.payin_address),
+                subitem_str("refund_address", self.decoded_payload.refund_address),
+                subitem_str("payout_address", self.decoded_payload.payout_address),
+                subitem_str("currency_from", self.decoded_payload.currency_from),
+                subitem_str("currency_to", self.decoded_payload.currency_to),
+                subitem_str("amount_to_provider", int.from_bytes(self.decoded_payload.amount_to_provider, 'big')),
+                subitem_str("amount_to_wallet", int.from_bytes(self.decoded_payload.amount_to_wallet, 'big')),
+            ])
+            if self.subcommand == SubCommand.SWAP:
+                ret += "\n" + subitem_str("device_transaction_id", self.decoded_payload.device_transaction_id)
+            else:
+                ret += "\n" + subitem_str("device_transaction_id_ng", self.decoded_payload.device_transaction_id_ng)
+        elif self.subcommand == SubCommand.SELL or self.subcommand == SubCommand.SELL_NG:
+            ret = "\n".join([
+                subitem_str("trader_email", self.decoded_payload.trader_email),
+                subitem_str("in_currency", self.decoded_payload.in_currency),
+                subitem_str("in_amount", self.decoded_payload.in_amount),
+                subitem_str("in_address", self.decoded_payload.in_address),
+                subitem_str("out_currency", self.decoded_payload.out_currency),
+                subitem_str("out_amount", self.decoded_payload.out_amount),
+                subitem_str("device_transaction_id", self.decoded_payload.device_transaction_id),
+            ])
+        elif self.subcommand == SubCommand.FUND or self.subcommand == SubCommand.FUND_NG:
+            ret = "\n".join([
+                subitem_str("user_id", self.decoded_payload.user_id),
+                subitem_str("account_name", self.decoded_payload.account_name),
+                subitem_str("in_currency", self.decoded_payload.in_currency),
+                subitem_str("in_amount", self.decoded_payload.in_amount),
+                subitem_str("in_address", self.decoded_payload.in_address),
+                subitem_str("device_transaction_id", self.decoded_payload.device_transaction_id),
+            ])
+        return ret
+
     def __str__(self) -> str:
-        return "\n".join([
-            super().__str__(),
-            summary("Transaction & fees proposed by the partner"),
-            "",
-            item_str("Transaction length", self.payload_length),
-            item_str("Transaction raw", self._raw_payload.hex()),
-            subtitle("Transaction details:"),
-            subitem_str("payin_address", self.payload.payin_address),
-            subitem_str("refund_address", self.payload.refund_address),
-            subitem_str("payout_address", self.payload.payout_address),
-            subitem_str("currency_from", self.payload.currency_from),
-            subitem_str("currency_to", self.payload.currency_to),
-            subitem_str("amount_to_provider", int.from_bytes(self.payload.amount_to_provider, 'big')),
-            subitem_str("amount_to_wallet", int.from_bytes(self.payload.amount_to_wallet, 'big')),
-            subitem_str("device_transaction_id", self.payload.device_transaction_id),
-            item_str("Fees", int.from_bytes(self.fees, 'big'))
-        ])
+        if self.extension & Extension.P2_MORE:
+            return "\n".join([
+                super().__str__(),
+                summary(self.summary_str),
+                "",
+                item_str("Total transaction length", self.payload_length),
+                item_str("Current transaction raw", self.current_raw_reception.hex()),
+            ])
+        else:
+            return "\n".join([
+                super().__str__(),
+                summary(self.summary_str),
+                "",
+                item_str("Transaction length", self.payload_length),
+                item_str("Transaction raw", self.current_raw_reception.hex()),
+                subtitle("Transaction details:"),
+                self.decoded_pb,
+                item_str("Fees length", self.fees_length),
+                item_str("Fees", int.from_bytes(self.fees, 'big')),
+            ])
 
 class CheckTransactionSignatureCommand(ExchangeCommand):
     def __init__(self, data, memory):
         super().__init__(data)
         self._signature = self.data
-        if signature_tester.check_partner_signature(memory.partner_public_key, memory.transaction, self.data, SUBCOMMAND_TO_CURVE[self.subcommand]):
+        message = memory.transaction
+        if self.subcommand != SubCommand.SWAP:
+            message = b'.' + message
+        if signature_tester.check_partner_signature(memory.partner_public_key, message, self.data, SUBCOMMAND_TO_CURVE[self.subcommand]):
             self.sign_check_text = "    (Valid signature of the transaction by the partner key)"
         else:
             self.sign_check_text = "    (/!\\ This is NOT a valid signature of the transaction by the partner key)"
@@ -442,6 +556,10 @@ class CheckAddress(ExchangeCommand):
 
 
 class CheckPayoutAddress(CheckAddress):
+    summary = "Configuration for TO currency"
+
+
+class CheckAssetIn(CheckAddress):
     summary = "Configuration for TO currency"
 
 
