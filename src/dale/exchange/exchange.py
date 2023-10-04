@@ -1,4 +1,5 @@
 import struct
+import binascii as binascii
 from enum import IntEnum
 from base64 import b64decode, urlsafe_b64decode
 from typing import Union, Any, Tuple, Optional
@@ -223,7 +224,7 @@ class ExchangeResponse(Response):
         if self.code == 0x9000:
             result = "SUCCESS"
         else:
-            result = f"ERROR {ERRORS.get(self.code, 'UNKNOWN')} ({hex(self.code)} - '{ERRORS[self.code]}')"
+            result = f"ERROR ({hex(self.code)} - '{ERRORS.get(self.code, 'UNKNOWN')}')"
         return "\n".join([
             super().__str__(),
             result
@@ -389,13 +390,17 @@ class ProcessTransactionCommand(ExchangeCommand):
             decoded = self.payload
             self.decoded_payload = NewTransactionResponse.FromString(decoded)
         else:
-            decoded = urlsafe_b64decode(self.payload)
-            if self.subcommand == SubCommand.SELL or self.subcommand == SubCommand.SELL_NG:
-                self.decoded_payload = NewSellResponse.FromString(decoded)
-            elif self.subcommand == SubCommand.FUND or self.subcommand == SubCommand.FUND_NG:
-                self.decoded_payload = NewFundResponse.FromString(decoded)
-            else:  # SubCommand.SWAP_NG
-                self.decoded_payload = NewTransactionResponse.FromString(decoded)
+            try:
+                # Add sufficient padding to decode
+                decoded = urlsafe_b64decode(self.payload + b'==')
+                if self.subcommand == SubCommand.SELL or self.subcommand == SubCommand.SELL_NG:
+                    self.decoded_payload = NewSellResponse.FromString(decoded)
+                elif self.subcommand == SubCommand.FUND or self.subcommand == SubCommand.FUND_NG:
+                    self.decoded_payload = NewFundResponse.FromString(decoded)
+                else:  # SubCommand.SWAP_NG
+                    self.decoded_payload = NewTransactionResponse.FromString(decoded)
+            except binascii.Error:
+                self.decoded_payload = None
 
     @property
     def summary_str(self) -> str:
@@ -408,38 +413,43 @@ class ProcessTransactionCommand(ExchangeCommand):
 
     @property
     def decoded_pb(self) -> str:
-        if self.subcommand == SubCommand.SWAP or self.subcommand == SubCommand.SWAP_NG:
+        if self.decoded_payload is not None:
+            if self.subcommand == SubCommand.SWAP or self.subcommand == SubCommand.SWAP_NG:
+                ret = "\n".join([
+                    subitem_str("payin_address", self.decoded_payload.payin_address),
+                    subitem_str("refund_address", self.decoded_payload.refund_address),
+                    subitem_str("payout_address", self.decoded_payload.payout_address),
+                    subitem_str("currency_from", self.decoded_payload.currency_from),
+                    subitem_str("currency_to", self.decoded_payload.currency_to),
+                    subitem_str("amount_to_provider", int.from_bytes(self.decoded_payload.amount_to_provider, 'big')),
+                    subitem_str("amount_to_wallet", int.from_bytes(self.decoded_payload.amount_to_wallet, 'big')),
+                ])
+                if self.subcommand == SubCommand.SWAP:
+                    ret += "\n" + subitem_str("device_transaction_id", self.decoded_payload.device_transaction_id)
+                else:
+                    ret += "\n" + subitem_str("device_transaction_id_ng", self.decoded_payload.device_transaction_id_ng)
+            elif self.subcommand == SubCommand.SELL or self.subcommand == SubCommand.SELL_NG:
+                ret = "\n".join([
+                    subitem_str("trader_email", self.decoded_payload.trader_email),
+                    subitem_str("in_currency", self.decoded_payload.in_currency),
+                    subitem_str("in_amount", self.decoded_payload.in_amount),
+                    subitem_str("in_address", self.decoded_payload.in_address),
+                    subitem_str("out_currency", self.decoded_payload.out_currency),
+                    subitem_str("out_amount", self.decoded_payload.out_amount),
+                    subitem_str("device_transaction_id", self.decoded_payload.device_transaction_id),
+                ])
+            elif self.subcommand == SubCommand.FUND or self.subcommand == SubCommand.FUND_NG:
+                ret = "\n".join([
+                    subitem_str("user_id", self.decoded_payload.user_id),
+                    subitem_str("account_name", self.decoded_payload.account_name),
+                    subitem_str("in_currency", self.decoded_payload.in_currency),
+                    subitem_str("in_amount", self.decoded_payload.in_amount),
+                    subitem_str("in_address", self.decoded_payload.in_address),
+                    subitem_str("device_transaction_id", self.decoded_payload.device_transaction_id),
+                ])
+        else:
             ret = "\n".join([
-                subitem_str("payin_address", self.decoded_payload.payin_address),
-                subitem_str("refund_address", self.decoded_payload.refund_address),
-                subitem_str("payout_address", self.decoded_payload.payout_address),
-                subitem_str("currency_from", self.decoded_payload.currency_from),
-                subitem_str("currency_to", self.decoded_payload.currency_to),
-                subitem_str("amount_to_provider", int.from_bytes(self.decoded_payload.amount_to_provider, 'big')),
-                subitem_str("amount_to_wallet", int.from_bytes(self.decoded_payload.amount_to_wallet, 'big')),
-            ])
-            if self.subcommand == SubCommand.SWAP:
-                ret += "\n" + subitem_str("device_transaction_id", self.decoded_payload.device_transaction_id)
-            else:
-                ret += "\n" + subitem_str("device_transaction_id_ng", self.decoded_payload.device_transaction_id_ng)
-        elif self.subcommand == SubCommand.SELL or self.subcommand == SubCommand.SELL_NG:
-            ret = "\n".join([
-                subitem_str("trader_email", self.decoded_payload.trader_email),
-                subitem_str("in_currency", self.decoded_payload.in_currency),
-                subitem_str("in_amount", self.decoded_payload.in_amount),
-                subitem_str("in_address", self.decoded_payload.in_address),
-                subitem_str("out_currency", self.decoded_payload.out_currency),
-                subitem_str("out_amount", self.decoded_payload.out_amount),
-                subitem_str("device_transaction_id", self.decoded_payload.device_transaction_id),
-            ])
-        elif self.subcommand == SubCommand.FUND or self.subcommand == SubCommand.FUND_NG:
-            ret = "\n".join([
-                subitem_str("user_id", self.decoded_payload.user_id),
-                subitem_str("account_name", self.decoded_payload.account_name),
-                subitem_str("in_currency", self.decoded_payload.in_currency),
-                subitem_str("in_amount", self.decoded_payload.in_amount),
-                subitem_str("in_address", self.decoded_payload.in_address),
-                subitem_str("device_transaction_id", self.decoded_payload.device_transaction_id),
+                subtitle("FAILED to decoded payload"),
             ])
         return ret
 
@@ -459,7 +469,7 @@ class ProcessTransactionCommand(ExchangeCommand):
                 summary(self.summary_str),
                 "",
                 item_str("Transaction length", self.payload_length),
-                item_str("Transaction raw", self.current_raw_reception.hex()),
+                item_str("Transaction raw", self.payload.hex()),
                 subtitle("Transaction details:"),
                 self.decoded_pb,
                 item_str("Fees length", self.fees_length),
@@ -470,13 +480,16 @@ class CheckTransactionSignatureCommand(ExchangeCommand):
     def __init__(self, data: str, memory: ExchangeMemory):
         super().__init__(data)
         self._signature = self.data
-        message = memory.transaction
-        if self.subcommand != SubCommand.SWAP:
-            message = b'.' + message
-        if signature_tester.check_partner_signature(memory.partner_public_key, message, self.data, SUBCOMMAND_TO_CURVE[self.subcommand]):
-            self.sign_check_text = "    (Valid signature of the transaction by the partner key)"
+        if memory.transaction is not None:
+            message = memory.transaction
+            if self.subcommand != SubCommand.SWAP:
+                message = b'.' + message
+            if signature_tester.check_partner_signature(memory.partner_public_key, message, self.data, SUBCOMMAND_TO_CURVE[self.subcommand]):
+                self.sign_check_text = "    (Valid signature of the transaction by the partner key)"
+            else:
+                self.sign_check_text = "    (/!\\ This is NOT a valid signature of the transaction by the partner key)"
         else:
-            self.sign_check_text = "    (/!\\ This is NOT a valid signature of the transaction by the partner key)"
+            self.sign_check_text = "    No transaction to parse"
 
     @property
     def signature(self) -> str:
