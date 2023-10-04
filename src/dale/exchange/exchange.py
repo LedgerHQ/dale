@@ -128,7 +128,7 @@ ERRORS = {
 
 
 
-INDENT="    "
+INDENT = "    "
 
 def summary(summary: str):
     return f"{summary}"
@@ -185,7 +185,7 @@ class ExchangeFactory(Factory):
         if not valid_ins(ins):
             return False
         elif ins == Ins.GET_VERSION_COMMAND or ins == Ins.START_NEW_TRANSACTION_COMMAND:
-            return True
+            return (data[4] == 0x00)
         else:
             # Don't match not entry-point INS that come out of nowhere, they are probably not for us
             return last_one_recognized
