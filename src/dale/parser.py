@@ -17,10 +17,14 @@ class APDUParser(ABC):
     @abstractmethod
     def is_response(self, line) -> bool:
         pass
+    @abstractmethod
+    def is_comment(self, line) -> bool:
+        pass
 
 class DefaultAPDUParser(APDUParser):
     _c = "=>"
     _r = "<="
+    _cm = "#"
 
     def __init__(self, factories: List[Factory]):
         super().__init__(factories)
@@ -37,6 +41,9 @@ class DefaultAPDUParser(APDUParser):
 
     def is_response(self, line) -> bool:
         return line.startswith(self._r)
+
+    def is_comment(self, line) -> bool:
+        return line.startswith(self._cm)
 
     def reset(self) -> None:
         self._conversation = list()
@@ -63,6 +70,8 @@ class DefaultAPDUParser(APDUParser):
                 self._pending = None
             else:
                 logging.warning("Unexpected answer. Ignoring")
+        elif self.is_comment(line):
+            pass
         else:
             logging.warning("Unknown line: %s", line)
 
