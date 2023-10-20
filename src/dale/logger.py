@@ -22,7 +22,8 @@ def main():
     parser = init_parser()
     args = parser.parse_args()
     apdu_file = args.apdu_file.resolve()
-    assert apdu_file.is_file(), f"'{apdu_file}' does not exist or is not a file! Aborting"
+    if not apdu_file.is_file():
+        raise AssertionError(f"'{apdu_file}' does not exist or is not a file! Aborting")
     logging.info("Reading from %s", apdu_file)
 
     with apdu_file.open() as filee:

@@ -216,8 +216,6 @@ class ExchangeFactory(Factory):
             return last_one_recognized
 
     def translate_command(self, data: bytes) -> Command:
-        assert data[0] == EXCHANGE_CLA
-        assert len(data) > 1
         ins = data[1]
         if ins == Ins.GET_VERSION_COMMAND:
             return GetVersionCommand(data, self.memory)
@@ -257,9 +255,8 @@ class ExchangeResponse(Response):
 
 class ExchangeCommand(Command):
     def __init__(self, data: bytes, memory: Optional[ExchangeMemory] = None):
-        assert data[0] == EXCHANGE_CLA, \
-            f"This question with CLA '{hex(data[0])}' is not for the Exchange application"
         super().__init__(data)
+        self.error = False
         if self.ins in INS:
             self.ins_str = f"Instruction: 0x{self.ins:02x} ({INS[self.ins]})"
         else:
@@ -689,18 +686,17 @@ class CheckAddress(ExchangeCommand):
     def __init__(self, data: bytes, memory: ExchangeMemory):
         super().__init__(data)
         # gathering configuration
-        assert len(self.data) >= 1
+        if len(self.data) < 2:
+            self.error = True
 
         self.configuration_length, self.configuration, remaining_apdu = lv_digest(self.data)
 
         self.ticker_length, self.ticker, remaining_conf = lv_digest(self.configuration)
         self.appname_length, self.appname, remaining_conf = lv_digest(remaining_conf)
         self.subconfiguration_length, subconfig, remaining_conf = lv_digest(remaining_conf)
-        assert remaining_conf == b''  # ?
         if self.subconfiguration_length > 0:
             self.subticker_length, self.subticker, remaining_subconf = lv_digest(subconfig)
             self.coefficient, remaining_subconf = l_digest(remaining_subconf)
-            assert remaining_subconf == b''  # ?
 
         self.signature_header, remaining_apdu = l_digest(remaining_apdu)
         self.signature_length, self.signature, remaining_apdu = lv_digest(remaining_apdu)
@@ -712,31 +708,36 @@ class CheckAddress(ExchangeCommand):
             super().__str__(),
             summary(self.summary),
             "",
-            item_str("Coin configuration length", self.configuration_length),
-            item_str("Coin configuration", self.configuration.hex()),
-            subitem_str("Ticker length", self.ticker_length),
-            subitem_str("Ticker", self.ticker.decode()),
-            subitem_str("Application name length", self.appname_length),
-            subitem_str("Application name", self.appname.decode()),
-            subitem_str("Subconfiguration length", self.subconfiguration_length),
         ])
-        if self.subconfiguration_length > 0:
+        if not self.error:
             string = "\n".join([
                 string,
-                subsubitem_str("Subticker length", self.subticker_length),
-                subsubitem_str("Subticker", self.subticker.decode()),
-                subsubitem_str("Subconfiguration coefficient", self.coefficient),
+                "",
+                item_str("Coin configuration length", self.configuration_length),
+                item_str("Coin configuration", self.configuration.hex()),
+                subitem_str("Ticker length", self.ticker_length),
+                subitem_str("Ticker", self.ticker.decode()),
+                subitem_str("Application name length", self.appname_length),
+                subitem_str("Application name", self.appname.decode()),
+                subitem_str("Subconfiguration length", self.subconfiguration_length),
             ])
-        string = "\n".join([
-            string,
-            "",
-            item_str("Coin configuration signature header", self.signature_header),
-            item_str("Coin configuration signature length", self.signature_length),
-            item_str("Coin configuration signature", self.signature.hex()),
-            "",
-            item_str("Derivation path length", self.derivation_path_length),
-            item_str("Derivation path", self.derivation_path.hex()),
-        ])
+            if self.subconfiguration_length > 0:
+                string = "\n".join([
+                    string,
+                    subsubitem_str("Subticker length", self.subticker_length),
+                    subsubitem_str("Subticker", self.subticker.decode()),
+                    subsubitem_str("Subconfiguration coefficient", self.coefficient),
+                ])
+            string = "\n".join([
+                string,
+                "",
+                item_str("Coin configuration signature header", self.signature_header),
+                item_str("Coin configuration signature length", self.signature_length),
+                item_str("Coin configuration signature", self.signature.hex()),
+                "",
+                item_str("Derivation path length", self.derivation_path_length),
+                item_str("Derivation path", self.derivation_path.hex()),
+            ])
         return string
 
 

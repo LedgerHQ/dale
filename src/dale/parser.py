@@ -58,11 +58,14 @@ class DefaultAPDUParser(APDUParser):
                 pair = APDUPair(self._pending, None)
             try:
                 data = bytes.fromhex(line.split(self._c)[1])
-                for f in self._factories:
-                    if f.is_recognized(data=data, last_one_recognized=(self._last_factory == f)):
-                        self._last_factory = f
-                        self._pending = f.translate_command(data=data)
-                        break
+                if len(data) < 5:
+                    logging.warning(f"Invalid command with only {len(data)} bytes, header is 5")
+                else:
+                    for f in self._factories:
+                        if f.is_recognized(data=data, last_one_recognized=(self._last_factory == f)):
+                            self._last_factory = f
+                            self._pending = f.translate_command(data=data)
+                            break
             except AssertionError as e:
                 logging.exception(e)
                 pass
