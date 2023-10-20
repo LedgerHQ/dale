@@ -2,11 +2,9 @@
 
 import logging
 from argparse import ArgumentParser, RawTextHelpFormatter
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple, Optional
 
-from dale.base import Response, APDUPair, Factory
+from dale.base import Factory
 from dale.exchange import ExchangeFactory
 from dale.parser import DefaultAPDUParser
 
@@ -35,8 +33,9 @@ def main():
     for exchange in apdu_parser.conversation:
         print(str(exchange))
 
-    print('='*45)
+    print('=' * 45)
     print('Finished.')
+
 
 if __name__ == '__main__':
     main()

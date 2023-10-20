@@ -31,20 +31,23 @@ class Command:
 
     def __str__(self):
         return "\n".join([
-            "="*80,
+            "=" * 80,
             f"=> {self.apdu.hex()}"
         ])
+
 
 class Response:
     def __init__(self, data: bytes):
         self.rapdu = data
         self.code = int.from_bytes(data[-2:], 'big')
         self.data = data[:-2]
+
     def __str__(self):
         return "\n".join([
-            "-"*80,
+            "-" * 80,
             f"<= {self.rapdu.hex()}"
         ])
+
 
 class Factory:
     def is_recognized(self, data: bytes, last_one_recognized: bool) -> bool:
@@ -58,6 +61,7 @@ class Factory:
 class APDUPair:
     command: Command
     response: Optional[Response]
+
     def __str__(self):
         return '\n'.join([
             str(self.command),

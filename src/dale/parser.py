@@ -4,22 +4,25 @@ from abc import ABC, abstractmethod
 from types import TracebackType
 from typing import Optional, Tuple, Type, List
 
-from dale.base import APDUPair, Response, Command, Factory
-from dale.exchange import ExchangeFactory
+from dale.base import APDUPair, Command, Factory
 
 
 class APDUParser(ABC):
     def __init__(self, factories: List[Factory]):
         self._factories = factories
+
     @abstractmethod
     def is_command(self, line) -> bool:
         pass
+
     @abstractmethod
     def is_response(self, line) -> bool:
         pass
+
     @abstractmethod
     def is_comment(self, line) -> bool:
         pass
+
 
 class DefaultAPDUParser(APDUParser):
     _c = "=>"
@@ -56,7 +59,7 @@ class DefaultAPDUParser(APDUParser):
             try:
                 data = bytes.fromhex(line.split(self._c)[1])
                 for f in self._factories:
-                    if f.is_recognized(data=data, last_one_recognized = (self._last_factory == f)):
+                    if f.is_recognized(data=data, last_one_recognized=(self._last_factory == f)):
                         self._last_factory = f
                         self._pending = f.translate_command(data=data)
                         break
