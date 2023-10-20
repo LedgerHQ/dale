@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 
 from dale.base import Command, Response, Factory
 
-from .pb.exchange_pb2 import NewTransactionResponse, NewSellResponse, NewFundResponse
+from .pb import NewTransactionResponse, NewSellResponse, NewFundResponse
 
 from . import signature_tester as signature_tester
 
@@ -40,16 +40,16 @@ def valid_ins(ins: int) -> bool:
 
 
 INS = {
-    Ins.GET_VERSION_COMMAND:                  'GET_VERSION',
-    Ins.START_NEW_TRANSACTION_COMMAND:        'START_NEW_TRANSACTION',
-    Ins.SET_PARTNER_KEY_COMMAND:              'SET_PARTNER_KEY',
-    Ins.CHECK_PARTNER_COMMAND:                'CHECK_PARTNER',
-    Ins.PROCESS_TRANSACTION_RESPONSE_COMMAND: 'PROCESS_TRANSACTION_RESPONSE',
-    Ins.CHECK_TRANSACTION_SIGNATURE_COMMAND:  'CHECK_TRANSACTION_SIGNATURE',
-    Ins.CHECK_PAYOUT_ADDRESS:                 'CHECK_PAYOUT_ADDRESS',
-    Ins.CHECK_ASSET_IN:                       'CHECK_ASSET_IN',
-    Ins.CHECK_REFUND_ADDRESS:                 'CHECK_REFUND_ADDRESS',
-    Ins.START_SIGNING_TRANSACTION:            'START_SIGNING_TRANSACTION'
+    int(Ins.GET_VERSION_COMMAND):                  'GET_VERSION',
+    int(Ins.START_NEW_TRANSACTION_COMMAND):        'START_NEW_TRANSACTION',
+    int(Ins.SET_PARTNER_KEY_COMMAND):              'SET_PARTNER_KEY',
+    int(Ins.CHECK_PARTNER_COMMAND):                'CHECK_PARTNER',
+    int(Ins.PROCESS_TRANSACTION_RESPONSE_COMMAND): 'PROCESS_TRANSACTION_RESPONSE',
+    int(Ins.CHECK_TRANSACTION_SIGNATURE_COMMAND):  'CHECK_TRANSACTION_SIGNATURE',
+    int(Ins.CHECK_PAYOUT_ADDRESS):                 'CHECK_PAYOUT_ADDRESS',
+    int(Ins.CHECK_ASSET_IN):                       'CHECK_ASSET_IN',
+    int(Ins.CHECK_REFUND_ADDRESS):                 'CHECK_REFUND_ADDRESS',
+    int(Ins.START_SIGNING_TRANSACTION):            'START_SIGNING_TRANSACTION'
 }
 
 
@@ -59,8 +59,8 @@ class Rate(IntEnum):
 
 
 RATE = {
-    Rate.FIXED: 'FIXED',
-    Rate.FLOATING: 'FLOATING'
+    int(Rate.FIXED): 'FIXED',
+    int(Rate.FLOATING): 'FLOATING'
 }
 
 
@@ -76,12 +76,12 @@ class SubCommand(IntEnum):
 SUBCOMMAND_MASK = 0x0F
 
 SUBCOMMAND_TO_TEXT = {
-    SubCommand.SWAP: 'SWAP',
-    SubCommand.SELL: 'SELL',
-    SubCommand.FUND: 'FUND',
-    SubCommand.SWAP_NG: 'SWAP_NG',
-    SubCommand.SELL_NG: 'SELL_NG',
-    SubCommand.FUND_NG: 'FUND_NG',
+    int(SubCommand.SWAP): 'SWAP',
+    int(SubCommand.SELL): 'SELL',
+    int(SubCommand.FUND): 'FUND',
+    int(SubCommand.SWAP_NG): 'SWAP_NG',
+    int(SubCommand.SELL_NG): 'SELL_NG',
+    int(SubCommand.FUND_NG): 'FUND_NG',
 }
 
 
@@ -94,10 +94,10 @@ class Extension(IntEnum):
 EXTENSION_MASK = 0xF0
 
 EXTENSION_TO_TEXT = {
-    Extension.P2_NONE: 'P2_NONE',
-    Extension.P2_EXTEND: 'P2_EXTEND',
-    Extension.P2_MORE: 'P2_MORE',
-    Extension.P2_MORE | Extension.P2_EXTEND: 'P2_MORE & P2_EXTEND',
+    int(Extension.P2_NONE): 'P2_NONE',
+    int(Extension.P2_EXTEND): 'P2_EXTEND',
+    int(Extension.P2_MORE): 'P2_MORE',
+    int(Extension.P2_MORE | Extension.P2_EXTEND): 'P2_MORE & P2_EXTEND',
 }
 
 
@@ -183,11 +183,11 @@ def bytes_to_raw_str(b: bytes) -> str:
 
 
 class ExchangeMemory:
-    partner_full_credentials: Optional[str] = None
-    partner_key: Optional[str] = None
+    partner_full_credentials: Optional[bytes] = None
+    partner_key: Optional[bytes] = None
     partner_curve: Optional[Curve] = None
-    reconstructed_data: Optional[str] = None
-    transaction: Optional[str] = None
+    reconstructed_data: Optional[bytes] = None
+    transaction: Optional[bytes] = None
 
     def reset(self):
         self.partner_full_credentials = None
@@ -256,7 +256,7 @@ class ExchangeResponse(Response):
 
 
 class ExchangeCommand(Command):
-    def __init__(self, data: str, memory: Optional[ExchangeMemory] = None):
+    def __init__(self, data: bytes, memory: Optional[ExchangeMemory] = None):
         assert data[0] == EXCHANGE_CLA, \
             f"This question with CLA '{hex(data[0])}' is not for the Exchange application"
         super().__init__(data)
@@ -370,7 +370,7 @@ class StartNewTransactionResponse(ExchangeResponse):
 
 
 class StartNewTransactionCommand(ExchangeCommand):
-    def __init__(self, data: str, memory: ExchangeMemory):
+    def __init__(self, data: bytes, memory: ExchangeMemory):
         super().__init__(data)
         memory.reset()
 
@@ -386,7 +386,7 @@ class StartNewTransactionCommand(ExchangeCommand):
 
 
 class SetPartnerKeyCommand(ExchangeCommand):
-    def __init__(self, data: str, memory: ExchangeMemory):
+    def __init__(self, data: bytes, memory: ExchangeMemory):
         super().__init__(data)
         self.name_length = self.data[0]
         self.name = self.data[1:1 + self.name_length]
@@ -436,7 +436,7 @@ class SetPartnerKeyCommand(ExchangeCommand):
 
 
 class CheckPartnerCommand(ExchangeCommand):
-    def __init__(self, data: str, memory: ExchangeMemory):
+    def __init__(self, data: bytes, memory: ExchangeMemory):
         super().__init__(data)
         if signature_tester.check_ledger_prod_signature(memory.partner_full_credentials, self.data):
             self.sign_check_text = title("(Valid signature of the partner credentials by the Ledger PROD key)")
@@ -460,9 +460,9 @@ class CheckPartnerCommand(ExchangeCommand):
 
 
 class ProcessTransactionCommand(ExchangeCommand):
-    def __init__(self, data: str, memory: ExchangeMemory):
+    def __init__(self, data: bytes, memory: ExchangeMemory):
         super().__init__(data)
-        if self.extension & Extension.P2_EXTEND:
+        if self.extension & Extension.P2_EXTEND and memory.reconstructed_data is not None:
             memory.reconstructed_data += self.data
         else:
             memory.reconstructed_data = self.data
@@ -473,15 +473,15 @@ class ProcessTransactionCommand(ExchangeCommand):
             if self.is_legacy:
                 self.tx_len = memory.reconstructed_data[0]
                 if self.is_swap:
-                    self.format_int = PayloadEncoding.BYTES_ARRAY
+                    self.format_int = int(PayloadEncoding.BYTES_ARRAY)
                 else:
-                    self.format_int = PayloadEncoding.BASE_64_URL
+                    self.format_int = int(PayloadEncoding.BASE_64_URL)
                 tx_offset = 1
             else:
                 self.format_int = memory.reconstructed_data[0]
-                if self.format_int == PayloadEncoding.BYTES_ARRAY:
+                if self.format_int == int(PayloadEncoding.BYTES_ARRAY):
                     self.format_str = f"0x{self.format_int:02x} (BYTES_ARRAY)"
-                elif self.format_int == PayloadEncoding.BASE_64_URL:
+                elif self.format_int == int(PayloadEncoding.BASE_64_URL):
                     self.format_str = f"0x{self.format_int:02x} (BASE_64_URL)"
                 else:
                     self.format_str = f"0x{self.format_int:02x} (UNRECOGNIZED)"
@@ -499,10 +499,10 @@ class ProcessTransactionCommand(ExchangeCommand):
         return (2 if self.is_ng else 1)
 
     def decode_pb(self):
-        if self.format_int == PayloadEncoding.BYTES_ARRAY:
+        if self.format_int == int(PayloadEncoding.BYTES_ARRAY):
             decoded = self.payload
             self.decoded_payload = NewTransactionResponse.FromString(decoded)
-        elif self.format_int == PayloadEncoding.BASE_64_URL:
+        elif self.format_int == int(PayloadEncoding.BASE_64_URL):
             try:
                 # Add sufficient padding to decode
                 decoded = urlsafe_b64decode(self.payload + b'==')
@@ -607,7 +607,7 @@ class ProcessTransactionCommand(ExchangeCommand):
 
 
 class CheckTransactionSignatureCommand(ExchangeCommand):
-    def __init__(self, data: str, memory: ExchangeMemory):
+    def __init__(self, data: bytes, memory: ExchangeMemory):
         super().__init__(data)
 
         if self.is_ng:
@@ -684,16 +684,16 @@ class CheckTransactionSignatureCommand(ExchangeCommand):
 
 
 class CheckAddress(ExchangeCommand):
-    summary = None
+    summary: Optional[str] = None
 
-    def __init__(self, data: str, memory: ExchangeMemory):
+    def __init__(self, data: bytes, memory: ExchangeMemory):
         super().__init__(data)
         # gathering configuration
         assert len(self.data) >= 1
 
-        self.configuration_length, self._configuration, remaining_apdu = lv_digest(self.data)
+        self.configuration_length, self.configuration, remaining_apdu = lv_digest(self.data)
 
-        self.ticker_length, self.ticker, remaining_conf = lv_digest(self._configuration)
+        self.ticker_length, self.ticker, remaining_conf = lv_digest(self.configuration)
         self.appname_length, self.appname, remaining_conf = lv_digest(remaining_conf)
         self.subconfiguration_length, subconfig, remaining_conf = lv_digest(remaining_conf)
         assert remaining_conf == b''  # ?
@@ -703,21 +703,9 @@ class CheckAddress(ExchangeCommand):
             assert remaining_subconf == b''  # ?
 
         self.signature_header, remaining_apdu = l_digest(remaining_apdu)
-        self.signature_length, self._signature, remaining_apdu = lv_digest(remaining_apdu)
+        self.signature_length, self.signature, remaining_apdu = lv_digest(remaining_apdu)
 
-        self.derivation_path_length, self._derivation_path, remaining_apdu = lv_digest(remaining_apdu)
-
-    @property
-    def configuration(self) -> str:
-        return self._configuration
-
-    @property
-    def signature(self) -> str:
-        return self._signature
-
-    @property
-    def derivation_path(self) -> str:
-        return self._derivation_path
+        self.derivation_path_length, self.derivation_path, remaining_apdu = lv_digest(remaining_apdu)
 
     def __str__(self):
         string = "\n".join([

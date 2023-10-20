@@ -32,11 +32,11 @@ class DefaultAPDUParser(APDUParser):
     def __init__(self, factories: List[Factory]):
         super().__init__(factories)
         self._pending: Optional[Command] = None
-        self._conversation = list()
-        self._last_factory = None
+        self._conversation: List[APDUPair] = list()
+        self._last_factory: Optional[Factory] = None
 
     @property
-    def conversation(self) -> Tuple[APDUPair]:
+    def conversation(self) -> Tuple[APDUPair, ...]:
         return tuple(self._conversation)
 
     def is_command(self, line) -> bool:

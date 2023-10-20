@@ -17,20 +17,7 @@ jobs:
       uses: actions/checkout@v3
     - run: pip install flake8
     - name: Flake8 lint Python code
-      run: find src/ -type f -name '*.py' -not -name "*_pb2.py" -exec flake8 --max-line-length=120 '{}' '+'
-
-  yapf:
-    name: Formatting
-    runs-on: ubuntu-latest
-    steps:
-    - name: Clone
-      uses: actions/checkout@v3
-    - run: pip install yapf toml
-    - name: Yapf source formatting
-      run: |
-        yapf src/ --recursive -d
-        yapf tests/ --recursive -d
-        yapf template/ --recursive -d
+      run: flake8
 
   mypy:
     name: Type checking
