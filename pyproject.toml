@@ -5,6 +5,3 @@ requires = [
     "protobuf>=3.19",
 ]
 build-backend = "setuptools.build_meta"
-
-[tool.mypy]
-ignore_missing_imports = true

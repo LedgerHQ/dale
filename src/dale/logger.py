@@ -2,11 +2,9 @@
 
 import logging
 from argparse import ArgumentParser, RawTextHelpFormatter
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple, Optional
 
-from dale.base import Response, APDUPair, Factory
+from dale.base import Factory
 from dale.exchange import ExchangeFactory
 from dale.parser import DefaultAPDUParser
 
@@ -24,7 +22,8 @@ def main():
     parser = init_parser()
     args = parser.parse_args()
     apdu_file = args.apdu_file.resolve()
-    assert apdu_file.is_file(), f"'{apdu_file}' does not exist or is not a file! Aborting"
+    if not apdu_file.is_file():
+        raise AssertionError(f"'{apdu_file}' does not exist or is not a file! Aborting")
     logging.info("Reading from %s", apdu_file)
 
     with apdu_file.open() as filee:
@@ -35,8 +34,9 @@ def main():
     for exchange in apdu_parser.conversation:
         print(str(exchange))
 
-    print('='*45)
+    print('=' * 45)
     print('Finished.')
+
 
 if __name__ == '__main__':
     main()

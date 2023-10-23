@@ -23,28 +23,35 @@ class Command:
 
         self.data = apdu[5:]
 
-        assert len(self.data) == self.len
-
     @property
     def next(self):
         return Response
 
     def __str__(self):
-        return "\n".join([
-            "="*80,
+        string = "\n".join([
+            "=" * 120,
             f"=> {self.apdu.hex()}"
         ])
+        if len(self.data) != self.len:
+            string = "\n".join([
+                string,
+                f"/!\\ Mismatch between advertised length {self.len} and actual length {len(self.data)}"
+            ])
+        return string
+
 
 class Response:
     def __init__(self, data: bytes):
         self.rapdu = data
         self.code = int.from_bytes(data[-2:], 'big')
         self.data = data[:-2]
+
     def __str__(self):
         return "\n".join([
-            "-"*80,
+            "-" * 120,
             f"<= {self.rapdu.hex()}"
         ])
+
 
 class Factory:
     def is_recognized(self, data: bytes, last_one_recognized: bool) -> bool:
@@ -58,6 +65,7 @@ class Factory:
 class APDUPair:
     command: Command
     response: Optional[Response]
+
     def __str__(self):
         return '\n'.join([
             str(self.command),

@@ -4,32 +4,39 @@ from abc import ABC, abstractmethod
 from types import TracebackType
 from typing import Optional, Tuple, Type, List
 
-from dale.base import APDUPair, Response, Command, Factory
-from dale.exchange import ExchangeFactory
+from dale.base import APDUPair, Command, Factory
 
 
 class APDUParser(ABC):
     def __init__(self, factories: List[Factory]):
         self._factories = factories
+
     @abstractmethod
     def is_command(self, line) -> bool:
         pass
+
     @abstractmethod
     def is_response(self, line) -> bool:
         pass
 
+    @abstractmethod
+    def is_comment(self, line) -> bool:
+        pass
+
+
 class DefaultAPDUParser(APDUParser):
     _c = "=>"
     _r = "<="
+    _cm = "#"
 
     def __init__(self, factories: List[Factory]):
         super().__init__(factories)
         self._pending: Optional[Command] = None
-        self._conversation = list()
-        self._last_factory = None
+        self._conversation: List[APDUPair] = list()
+        self._last_factory: Optional[Factory] = None
 
     @property
-    def conversation(self) -> Tuple[APDUPair]:
+    def conversation(self) -> Tuple[APDUPair, ...]:
         return tuple(self._conversation)
 
     def is_command(self, line) -> bool:
@@ -37,6 +44,9 @@ class DefaultAPDUParser(APDUParser):
 
     def is_response(self, line) -> bool:
         return line.startswith(self._r)
+
+    def is_comment(self, line) -> bool:
+        return line.startswith(self._cm)
 
     def reset(self) -> None:
         self._conversation = list()
@@ -48,11 +58,14 @@ class DefaultAPDUParser(APDUParser):
                 pair = APDUPair(self._pending, None)
             try:
                 data = bytes.fromhex(line.split(self._c)[1])
-                for f in self._factories:
-                    if f.is_recognized(data=data, last_one_recognized = (self._last_factory == f)):
-                        self._last_factory = f
-                        self._pending = f.translate_command(data=data)
-                        break
+                if len(data) < 5:
+                    logging.warning(f"Invalid command with only {len(data)} bytes, header is 5")
+                else:
+                    for f in self._factories:
+                        if f.is_recognized(data=data, last_one_recognized=(self._last_factory == f)):
+                            self._last_factory = f
+                            self._pending = f.translate_command(data=data)
+                            break
             except AssertionError as e:
                 logging.exception(e)
                 pass
@@ -63,6 +76,8 @@ class DefaultAPDUParser(APDUParser):
                 self._pending = None
             else:
                 logging.warning("Unexpected answer. Ignoring")
+        elif self.is_comment(line):
+            pass
         else:
             logging.warning("Unknown line: %s", line)
 
