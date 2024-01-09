@@ -1,5 +1,4 @@
 import struct
-import binascii as binascii
 from enum import IntEnum
 from base64 import urlsafe_b64decode
 from typing import Any, Tuple, Optional, List
@@ -153,6 +152,10 @@ def title(title: str):
 
 def subtitle(s_title: str):
     return f"{INDENT}{INDENT}{s_title}"
+
+
+def subsubtitle(s_title: str):
+    return f"{INDENT}{INDENT}{INDENT}{s_title}"
 
 
 def item_str(name: str, field: Any):
@@ -485,23 +488,24 @@ class ProcessTransactionCommand(ExchangeCommand):
         return (2 if self.is_ng else 1)
 
     def decode_pb(self):
-        if self.format_int == int(PayloadEncoding.BYTES_ARRAY):
-            decoded = self.payload
-            self.decoded_payload = NewTransactionResponse.FromString(decoded)
-        elif self.format_int == int(PayloadEncoding.BASE_64_URL):
-            try:
+        self.urlsafe_decoded = None
+        self.decoded_payload = None
+        # Global try catch in case urlsafe_b64decode or PB throws
+        try:
+            if self.format_int == int(PayloadEncoding.BYTES_ARRAY):
+                self.urlsafe_decoded = self.payload
+                self.decoded_payload = NewTransactionResponse.FromString(self.urlsafe_decoded)
+            elif self.format_int == int(PayloadEncoding.BASE_64_URL):
                 # Add sufficient padding to decode
-                decoded = urlsafe_b64decode(self.payload + b'==')
+                self.urlsafe_decoded = urlsafe_b64decode(self.payload + b'==')
                 if self.is_swap:
-                    self.decoded_payload = NewTransactionResponse.FromString(decoded)
+                    self.decoded_payload = NewTransactionResponse.FromString(self.urlsafe_decoded)
                 elif self.is_sell:
-                    self.decoded_payload = NewSellResponse.FromString(decoded)
+                    self.decoded_payload = NewSellResponse.FromString(self.urlsafe_decoded)
                 elif self.is_fund:
-                    self.decoded_payload = NewFundResponse.FromString(decoded)
-            except binascii.Error:
-                self.decoded_payload = None
-        else:
-            self.decoded_payload = None
+                    self.decoded_payload = NewFundResponse.FromString(self.urlsafe_decoded)
+        except Exception:
+            pass
 
     @property
     def summary_str(self) -> str:
@@ -551,7 +555,7 @@ class ProcessTransactionCommand(ExchangeCommand):
                 ]
         else:
             ret = [
-                subtitle("FAILED to decoded payload"),
+                subsubtitle("FAILED to decode payload"),
             ]
         return ret
 
@@ -581,8 +585,10 @@ class ProcessTransactionCommand(ExchangeCommand):
             strings += [
                 item_str("Transaction length", self.tx_len),
                 item_str("Transaction raw", self.payload.hex()),
+                item_str("Urlsafe b64 decoded", self.urlsafe_decoded.hex()),
                 subtitle("Transaction details:"),
             ]
+
             # PB content
             strings += self.decoded_pb
             # Fees
