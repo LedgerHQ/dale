@@ -146,28 +146,12 @@ def summary(summary: str):
     return f"{summary}"
 
 
-def title(title: str):
-    return f"{INDENT}{title}"
+def title(level: int, title: str):
+    return f"{INDENT * level}{title}"
 
 
-def subtitle(s_title: str):
-    return f"{INDENT}{INDENT}{s_title}"
-
-
-def subsubtitle(s_title: str):
-    return f"{INDENT}{INDENT}{INDENT}{s_title}"
-
-
-def item_str(name: str, field: Any):
-    return f"{INDENT}{name}: {str(field)}"
-
-
-def subitem_str(name: str, field: Any):
-    return f"{INDENT}{INDENT}{name}: {str(field)}"
-
-
-def subsubitem_str(name: str, field: Any):
-    return f"{INDENT}{INDENT}{INDENT}{name}: {str(field)}"
+def item_str(level: int, name: str, field: Any):
+    return f"{INDENT * level}{name}: {str(field)}"
 
 
 def lv_digest(data: bytes) -> Tuple[int, bytes, bytes]:
@@ -359,7 +343,7 @@ class StartNewTransactionResponse(ExchangeResponse):
     def __str__(self):
         return "\n".join([
             super().__str__(),
-            item_str("Transaction ID", self.transaction_id),
+            item_str(1, "Transaction ID", self.transaction_id),
         ])
 
 
@@ -414,12 +398,12 @@ class SetPartnerKeyCommand(ExchangeCommand):
             super().__str__(),
             summary("Partner credentials"),
             "",
-            item_str("Partner name length", self.name_length),
-            item_str("Partner name", self.name),
+            item_str(1, "Partner name length", self.name_length),
+            item_str(1, "Partner name", self.name),
         ]
         if self.is_ng:
-            strings.append(item_str("Partner curve", self.curve_str))
-        strings.append(item_str("Partner public_key", self.public_key.hex()))
+            strings.append(item_str(1, "Partner curve", self.curve_str))
+        strings.append(item_str(1, "Partner public_key", self.public_key.hex()))
         return "\n".join(strings)
 
 
@@ -427,11 +411,11 @@ class CheckPartnerCommand(ExchangeCommand):
     def __init__(self, data: bytes, memory: ExchangeMemory):
         super().__init__(data)
         if signature_tester.check_ledger_prod_signature(memory.partner_full_credentials, self.data):
-            self.sign_check_text = title("(Valid signature of the partner credentials by the Ledger PROD key)")
+            self.sign_check_text = title(1, "(Valid signature of the partner credentials by the Ledger PROD key)")
         elif signature_tester.check_ledger_test_signature(memory.partner_full_credentials, self.data):
-            self.sign_check_text = title("(Valid signature of the partner credentials by the Ledger TEST key)")
+            self.sign_check_text = title(1, "(Valid signature of the partner credentials by the Ledger TEST key)")
         else:
-            self.sign_check_text = title("(/!\\ This is NOT a valid signature of the partner credentials)")
+            self.sign_check_text = title(1, "(/!\\ This is NOT a valid signature of the partner credentials)")
 
     @property
     def partner_signature(self):
@@ -442,7 +426,7 @@ class CheckPartnerCommand(ExchangeCommand):
             super().__str__(),
             summary("Partner credentials signed by the Ledger key"),
             "",
-            item_str("Signature", self.data.hex()),
+            item_str(1, "Signature", self.data.hex()),
             self.sign_check_text,
         ]
         return "\n".join(strings)
@@ -521,41 +505,41 @@ class ProcessTransactionCommand(ExchangeCommand):
         if self.decoded_payload is not None:
             if self.is_swap:
                 ret = [
-                    subitem_str("payin_address", self.decoded_payload.payin_address),
-                    subitem_str("refund_address", self.decoded_payload.refund_address),
-                    subitem_str("payout_address", self.decoded_payload.payout_address),
-                    subitem_str("currency_from", self.decoded_payload.currency_from),
-                    subitem_str("currency_to", self.decoded_payload.currency_to),
-                    subitem_str("amount_to_provider", int.from_bytes(self.decoded_payload.amount_to_provider, 'big')),
-                    subitem_str("amount_to_wallet", int.from_bytes(self.decoded_payload.amount_to_wallet, 'big')),
+                    item_str(2, "payin_address", self.decoded_payload.payin_address),
+                    item_str(2, "refund_address", self.decoded_payload.refund_address),
+                    item_str(2, "payout_address", self.decoded_payload.payout_address),
+                    item_str(2, "currency_from", self.decoded_payload.currency_from),
+                    item_str(2, "currency_to", self.decoded_payload.currency_to),
+                    item_str(2, "amount_to_provider", int.from_bytes(self.decoded_payload.amount_to_provider, 'big')),
+                    item_str(2, "amount_to_wallet", int.from_bytes(self.decoded_payload.amount_to_wallet, 'big')),
                 ]
                 if self.is_legacy:
-                    ret += [subitem_str("device_transaction_id", self.decoded_payload.device_transaction_id)]
+                    ret += [item_str(2, "device_transaction_id", self.decoded_payload.device_transaction_id)]
                 else:
-                    ret += [subitem_str("device_transaction_id_ng",
+                    ret += [item_str(2, "device_transaction_id_ng",
                                         bytes_to_raw_str(self.decoded_payload.device_transaction_id_ng))]
             elif self.is_sell:
                 ret = [
-                    subitem_str("trader_email", self.decoded_payload.trader_email),
-                    subitem_str("in_currency", self.decoded_payload.in_currency),
-                    subitem_str("in_amount", int.from_bytes(self.decoded_payload.in_amount, 'big')),
-                    subitem_str("in_address", self.decoded_payload.in_address),
-                    subitem_str("out_currency", self.decoded_payload.out_currency),
-                    subitem_str("out_amount", self.decoded_payload.out_amount),
-                    subitem_str("device_transaction_id", bytes_to_raw_str(self.decoded_payload.device_transaction_id)),
+                    item_str(2, "trader_email", self.decoded_payload.trader_email),
+                    item_str(2, "in_currency", self.decoded_payload.in_currency),
+                    item_str(2, "in_amount", int.from_bytes(self.decoded_payload.in_amount, 'big')),
+                    item_str(2, "in_address", self.decoded_payload.in_address),
+                    item_str(2, "out_currency", self.decoded_payload.out_currency),
+                    item_str(2, "out_amount", self.decoded_payload.out_amount),
+                    item_str(2, "device_transaction_id", bytes_to_raw_str(self.decoded_payload.device_transaction_id)),
                 ]
             elif self.is_fund:
                 ret = [
-                    subitem_str("user_id", self.decoded_payload.user_id),
-                    subitem_str("account_name", self.decoded_payload.account_name),
-                    subitem_str("in_currency", self.decoded_payload.in_currency),
-                    subitem_str("in_amount", int.from_bytes(self.decoded_payload.in_amount, 'big')),
-                    subitem_str("in_address", self.decoded_payload.in_address),
-                    subitem_str("device_transaction_id", bytes_to_raw_str(self.decoded_payload.device_transaction_id)),
+                    item_str(2, "user_id", self.decoded_payload.user_id),
+                    item_str(2, "account_name", self.decoded_payload.account_name),
+                    item_str(2, "in_currency", self.decoded_payload.in_currency),
+                    item_str(2, "in_amount", int.from_bytes(self.decoded_payload.in_amount, 'big')),
+                    item_str(2, "in_address", self.decoded_payload.in_address),
+                    item_str(2, "device_transaction_id", bytes_to_raw_str(self.decoded_payload.device_transaction_id)),
                 ]
         else:
             ret = [
-                subsubtitle("FAILED to decode payload"),
+                title(3, "FAILED to decode payload"),
             ]
         return ret
 
@@ -565,7 +549,7 @@ class ProcessTransactionCommand(ExchangeCommand):
                 super().__str__(),
                 summary(self.summary_str),
                 "",
-                item_str("Current transaction raw", self.current_raw_reception.hex()),
+                item_str(1, "Current transaction raw", self.current_raw_reception.hex()),
             ]
             return "\n".join(strings)
         else:
@@ -579,22 +563,22 @@ class ProcessTransactionCommand(ExchangeCommand):
 
             # Format on NG apdus
             if self.is_ng:
-                strings.append(item_str("Transaction encoding", self.format_str))
+                strings.append(item_str(1, "Transaction encoding", self.format_str))
 
             # Raw TX
             strings += [
-                item_str("Transaction length", self.tx_len),
-                item_str("Transaction raw", self.payload.hex()),
-                item_str("Urlsafe b64 decoded", self.urlsafe_decoded.hex()),
-                subtitle("Transaction details:"),
+                item_str(1, "Transaction length", self.tx_len),
+                item_str(1, "Transaction raw", self.payload.hex()),
+                item_str(1, "Urlsafe b64 decoded", self.urlsafe_decoded.hex()),
+                title(2, "Transaction details:"),
             ]
 
             # PB content
             strings += self.decoded_pb
             # Fees
             strings += [
-                item_str("Fees length", self.fees_length),
-                item_str("Fees", int.from_bytes(self.fees, 'big')),
+                item_str(1, "Fees length", self.fees_length),
+                item_str(1, "Fees", int.from_bytes(self.fees, 'big')),
             ]
             return "\n".join(strings)
 
@@ -664,11 +648,11 @@ class CheckTransactionSignatureCommand(ExchangeCommand):
         ]
         if self.is_ng:
             strings += [
-                item_str("Signature computation", self.sig_computation_str),
-                item_str("Signature encoding", self.sig_encoding_str)
+                item_str(1, "Signature computation", self.sig_computation_str),
+                item_str(1, "Signature encoding", self.sig_encoding_str)
             ]
         strings += [
-            item_str("Signature", self.signature.hex()),
+            item_str(1, "Signature", self.signature.hex()),
             self.sign_check_text,
         ]
         return "\n".join(strings)
@@ -705,28 +689,28 @@ class CheckAddress(ExchangeCommand):
         ]
         if not self.error:
             strings += [
-                item_str("Coin configuration length", self.configuration_length),
-                item_str("Coin configuration", self.configuration.hex()),
-                subitem_str("Ticker length", self.ticker_length),
-                subitem_str("Ticker", self.ticker.decode()),
-                subitem_str("Application name length", self.appname_length),
-                subitem_str("Application name", self.appname.decode()),
-                subitem_str("Subconfiguration length", self.subconfiguration_length),
+                item_str(1, "Coin configuration length", self.configuration_length),
+                item_str(1, "Coin configuration", self.configuration.hex()),
+                item_str(2, "Ticker length", self.ticker_length),
+                item_str(2, "Ticker", self.ticker.decode()),
+                item_str(2, "Application name length", self.appname_length),
+                item_str(2, "Application name", self.appname.decode()),
+                item_str(2, "Subconfiguration length", self.subconfiguration_length),
             ]
             if self.subconfiguration_length > 0:
                 strings += [
-                    subsubitem_str("Subticker length", self.subticker_length),
-                    subsubitem_str("Subticker", self.subticker.decode()),
-                    subsubitem_str("Subconfiguration coefficient", self.coefficient),
+                    item_str(3, "Subticker length", self.subticker_length),
+                    item_str(3, "Subticker", self.subticker.decode()),
+                    item_str(3, "Subconfiguration coefficient", self.coefficient),
                 ]
             strings += [
                 "",
-                item_str("Coin configuration signature header", self.signature_header),
-                item_str("Coin configuration signature length", self.signature_length),
-                item_str("Coin configuration signature", self.signature.hex()),
+                item_str(1, "Coin configuration signature header", self.signature_header),
+                item_str(1, "Coin configuration signature length", self.signature_length),
+                item_str(1, "Coin configuration signature", self.signature.hex()),
                 "",
-                item_str("Derivation path length", self.derivation_path_length),
-                item_str("Derivation path", self.derivation_path.hex()),
+                item_str(1, "Derivation path length", self.derivation_path_length),
+                item_str(1, "Derivation path", self.derivation_path.hex()),
             ]
         return "\n".join(strings)
 
