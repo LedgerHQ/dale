@@ -466,6 +466,7 @@ class ProcessTransactionCommand(ExchangeCommand):
             fees_offset = tx_offset + self.tx_len
             self.fees_length = memory.reconstructed_data[fees_offset]
             self.fees = memory.reconstructed_data[fees_offset + 1:fees_offset + 1 + self.fees_length]
+            self.decode_pb()
 
     @property
     def size_of_payload_length_field(self) -> int:
@@ -553,7 +554,6 @@ class ProcessTransactionCommand(ExchangeCommand):
             ]
             return "\n".join(strings)
         else:
-            self.decode_pb()
             # Header
             strings = [
                 super().__str__(),
