@@ -658,6 +658,50 @@ class CheckTransactionSignatureCommand(ExchangeCommand):
         return "\n".join(strings)
 
 
+class UnpackedDerivationPath:
+    def __init__(self, derivation_path: bytes):
+        self.valid = False
+        self.bitcoin_format = None
+
+        if len(derivation_path) % 4 <= 2:
+            if len(derivation_path) % 4 == 2:
+                # Bitcoin like derivation path
+                self.bitcoin_format = derivation_path[0]
+                derivation_path = derivation_path[1:]
+
+            self.derivation_path_length = derivation_path[0]
+            derivation_path = derivation_path[1:]
+            if self.derivation_path_length == len(derivation_path) / 4:
+                self.valid = True
+                self.unpacked_derivation_path = "m"
+                for chunk in [derivation_path[i:i + 4] for i in range(0, len(derivation_path), 4)]:
+                    if chunk != b'':
+                        value = int.from_bytes(chunk, byteorder='big')
+                        if value & 2**31:
+                            value_str = str(value & ~2**31) + "'"
+                        else:
+                            value_str = str(value)
+                        self.unpacked_derivation_path += "/" + value_str
+
+    def __str__(self):
+        strings = []
+        if not self.valid:
+            strings += [
+                title(2, "Failed to unpack derivation path, length does not match"),
+            ]
+        else:
+            if self.bitcoin_format is not None:
+                strings += [
+                    item_str(2, "Bitcoin like format header", self.bitcoin_format),
+                ]
+
+            strings += [
+                item_str(2, "Unpacked derivation path element number", self.derivation_path_length),
+                item_str(2, "Unpacked derivation path", self.unpacked_derivation_path),
+            ]
+        return "\n".join(strings)
+
+
 class CheckAddress(ExchangeCommand):
     summary: Optional[str] = None
 
@@ -679,7 +723,8 @@ class CheckAddress(ExchangeCommand):
         self.signature_header, remaining_apdu = l_digest(remaining_apdu)
         self.signature_length, self.signature, remaining_apdu = lv_digest(remaining_apdu)
 
-        self.derivation_path_length, self.derivation_path, remaining_apdu = lv_digest(remaining_apdu)
+        self.raw_derivation_path_length, self.raw_derivation_path, remaining_apdu = lv_digest(remaining_apdu)
+        self.unpacked_derivation_path = UnpackedDerivationPath(self.raw_derivation_path)
 
     def __str__(self):
         strings = [
@@ -709,9 +754,10 @@ class CheckAddress(ExchangeCommand):
                 item_str(1, "Coin configuration signature length", self.signature_length),
                 item_str(1, "Coin configuration signature", self.signature.hex()),
                 "",
-                item_str(1, "Derivation path length", self.derivation_path_length),
-                item_str(1, "Derivation path", self.derivation_path.hex()),
+                item_str(1, "Raw derivation path length", self.raw_derivation_path_length),
+                item_str(1, "Raw derivation path", self.raw_derivation_path.hex()),
             ]
+            strings += [str(self.unpacked_derivation_path)]
         return "\n".join(strings)
 
 
