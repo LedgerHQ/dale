@@ -722,6 +722,15 @@ class CheckAddress(ExchangeCommand):
 
         self.signature_header, remaining_apdu = l_digest(remaining_apdu)
         self.signature_length, self.signature, remaining_apdu = lv_digest(remaining_apdu)
+        full_signature = self.signature_header.to_bytes(length=1, byteorder='big') \
+            + self.signature_length.to_bytes(length=1, byteorder='big') \
+            + self.signature
+        if signature_tester.check_ledger_prod_signature(self.configuration, full_signature):
+            self.sign_check_text = title(1, "(Valid signature of the coin configuration by the Ledger PROD key)")
+        elif signature_tester.check_ledger_test_signature(self.configuration, full_signature):
+            self.sign_check_text = title(1, "(Valid signature of the coin configuration by the Ledger TEST key)")
+        else:
+            self.sign_check_text = title(1, "(/!\\ This is NOT a valid signature of the coin configuration)")
 
         self.raw_derivation_path_length, self.raw_derivation_path, remaining_apdu = lv_digest(remaining_apdu)
         self.unpacked_derivation_path = UnpackedDerivationPath(self.raw_derivation_path)
@@ -753,11 +762,12 @@ class CheckAddress(ExchangeCommand):
                 item_str(1, "Coin configuration signature header", self.signature_header),
                 item_str(1, "Coin configuration signature length", self.signature_length),
                 item_str(1, "Coin configuration signature", self.signature.hex()),
+                self.sign_check_text,
                 "",
                 item_str(1, "Raw derivation path length", self.raw_derivation_path_length),
                 item_str(1, "Raw derivation path", self.raw_derivation_path.hex()),
+                str(self.unpacked_derivation_path),
             ]
-            strings += [str(self.unpacked_derivation_path)]
         return "\n".join(strings)
 
 
