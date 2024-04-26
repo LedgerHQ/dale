@@ -1,7 +1,7 @@
 import struct
 from enum import IntEnum
 from base64 import urlsafe_b64decode
-from typing import Any, Tuple, Optional, List
+from typing import Optional, List
 from ecdsa import curves
 from ecdsa.curves import Curve
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
@@ -9,7 +9,8 @@ from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from dale.base import Command, Response, Factory
 
 from .pb import NewTransactionResponse, NewSellResponse, NewFundResponse
-
+from ..utils import lv_digest, l_digest, bytes_to_raw_str
+from ..display import summary, title, item_str
 from . import signature_tester as signature_tester
 
 CONFIGURATION_DER_SIGNATURE_LENGTH = 70
@@ -138,35 +139,6 @@ ERRORS = {
     0x6D01: "UNEXPECTED_INSTRUCTION",
     0x9D1A: "SIGN_VERIFICATION_FAIL",
 }
-
-INDENT = "    "
-
-
-def summary(summary: str):
-    return f"{summary}"
-
-
-def title(level: int, title: str):
-    return f"{INDENT * level}{title}"
-
-
-def item_str(level: int, name: str, field: Any):
-    return f"{INDENT * level}{name}: {str(field)}"
-
-
-def lv_digest(data: bytes) -> Tuple[int, bytes, bytes]:
-    if len(data) == 0:
-        return (0, b'', b'')
-    size = data[0]
-    return (size, data[1:1 + size], data[1 + size:])
-
-
-def l_digest(data: bytes) -> Tuple[int, bytes]:
-    return (data[0], data[1:])
-
-
-def bytes_to_raw_str(b: bytes) -> str:
-    return ''.join('{:02x}'.format(x) for x in b)
 
 
 class ExchangeMemory:
@@ -300,7 +272,7 @@ class ExchangeCommand(Command):
     def __str__(self):
         return "\n".join([
             super().__str__(),
-            f"{self.ins_str} - {self.rate_str} - {self.subcommand_str} - {self.extension_str}"
+            f"EXCHANGE APDU | {self.ins_str} - {self.rate_str} - {self.subcommand_str} - {self.extension_str}"
         ])
 
 
