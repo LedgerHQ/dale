@@ -6,6 +6,7 @@ from pathlib import Path
 
 from dale.base import Factory
 from dale.exchange import ExchangeFactory
+from dale.default_apdus import DefaultAPDUsFactory
 from dale.parser import DefaultAPDUParser
 
 
@@ -27,7 +28,7 @@ def main():
     logging.info("Reading from %s", apdu_file)
 
     with apdu_file.open() as filee:
-        with DefaultAPDUParser([ExchangeFactory(), Factory()]) as apdu_parser:
+        with DefaultAPDUParser([ExchangeFactory(), DefaultAPDUsFactory(), Factory()]) as apdu_parser:
             for line in filee:
                 apdu_parser.feed(line)
 
