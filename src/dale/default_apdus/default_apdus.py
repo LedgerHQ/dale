@@ -1,55 +1,65 @@
-from enum import IntEnum
 from dale.base import Command, Response, Factory
 
 from ..utils import lv_digest, l_digest
 from ..display import summary, item_str
 
-DEFAULT_CLA = 0xB0
+
+class DefaultClaIns:
+    DEFAULT_APDU_INS_GET_VERSION        = (0xB0, 0x01)
+    DEFAULT_APDU_INS_GET_SEED_COOKIE    = (0xB0, 0x02)
+    DEFAULT_APDU_INS_STACK_CONSUMPTION  = (0xB0, 0x57)
+    DEFAULT_APDU_INS_APPLICATION_EXIT   = (0xB0, 0xA7)
+    DEFAULT_APDU_INS_APPLICATION_OPEN   = (0xE0, 0xD8)
+
+    @classmethod
+    def get_default_instructions(cls):
+        return [
+            cls.DEFAULT_APDU_INS_GET_VERSION,
+            cls.DEFAULT_APDU_INS_GET_SEED_COOKIE,
+            cls.DEFAULT_APDU_INS_STACK_CONSUMPTION,
+            cls.DEFAULT_APDU_INS_APPLICATION_EXIT,
+            cls.DEFAULT_APDU_INS_APPLICATION_OPEN,
+        ]
 
 
-class Ins(IntEnum):
-    DEFAULT_APDU_INS_GET_VERSION        = 0x01
-    DEFAULT_APDU_INS_GET_SEED_COOKIE    = 0x02
-    DEFAULT_APDU_INS_STACK_CONSUMPTION  = 0x57
-    DEFAULT_APDU_INS_APPLICATION_EXIT   = 0xA7
+def is_valid_default_ins(cla: int, ins: int) -> bool:
+    for instruction in DefaultClaIns.get_default_instructions():
+        if (cla, ins) == instruction:
+            return True
+    return False
 
 
-def valid_ins(ins: int) -> bool:
-    try:
-        Ins(ins)
-    except ValueError:
-        return False
-    return True
+def default_ins_to_text(cla: int, ins: int) -> str:
+    instruction_map = {
+        DefaultClaIns.DEFAULT_APDU_INS_GET_VERSION: "GET_VERSION",
+        DefaultClaIns.DEFAULT_APDU_INS_GET_SEED_COOKIE: "GET_SEED_COOKIE",
+        DefaultClaIns.DEFAULT_APDU_INS_STACK_CONSUMPTION: "STACK_CONSUMPTION",
+        DefaultClaIns.DEFAULT_APDU_INS_APPLICATION_EXIT: "APPLICATION_EXIT",
+        DefaultClaIns.DEFAULT_APDU_INS_APPLICATION_OPEN: "APPLICATION_OPEN",
+    }
 
-
-INS = {
-    int(Ins.DEFAULT_APDU_INS_GET_VERSION):          'GET_VERSION',
-    int(Ins.DEFAULT_APDU_INS_GET_SEED_COOKIE):      'GET_SEED_COOKIE',
-    int(Ins.DEFAULT_APDU_INS_STACK_CONSUMPTION):    'STACK_CONSUMPTION',
-    int(Ins.DEFAULT_APDU_INS_APPLICATION_EXIT):     'APPLICATION_EXIT',
-}
+    return instruction_map.get((cla, ins), "UNKNOWN_INSTRUCTION")
 
 
 class DefaultAPDUsFactory(Factory):
 
     def is_recognized(self, data: bytes, last_one_recognized: bool) -> bool:
-        if len(data) != 5:
-            return False
-        if data[0] != DEFAULT_CLA:
-            return False
-
+        cla = data[0]
         ins = data[1]
-        if not valid_ins(ins):
+        if not is_valid_default_ins(cla, ins):
             return False
         else:
             return True
 
     def translate_command(self, data: bytes) -> Command:
+        cla = data[0]
         ins = data[1]
-        if ins == Ins.DEFAULT_APDU_INS_GET_VERSION:
+        if (cla, ins) == DefaultClaIns.DEFAULT_APDU_INS_GET_VERSION:
             return GetVersionCommand(data)
-        if ins == Ins.DEFAULT_APDU_INS_APPLICATION_EXIT:
+        if (cla, ins) == DefaultClaIns.DEFAULT_APDU_INS_APPLICATION_EXIT:
             return ExitApplicationCommand(data)
+        if (cla, ins) == DefaultClaIns.DEFAULT_APDU_INS_APPLICATION_OPEN:
+            return OpenApplicationCommand(data)
         else:
             raise NotImplementedError
 
@@ -57,7 +67,7 @@ class DefaultAPDUsFactory(Factory):
 class DefaultAPDUsCommand(Command):
     def __init__(self, data: bytes):
         super().__init__(data)
-        self.ins_str = f"Instruction: 0x{self.ins:02x} ({INS[self.ins]})"
+        self.ins_str = f"CLA: 0x{self.cla:02x}, INS: 0x{self.ins:02x} ({default_ins_to_text(self.cla, self.ins)})"
         self.header = f"DEFAULT APDU | {self.ins_str}"
 
     @property
@@ -139,6 +149,36 @@ class ExitApplicationResponse(DefaultAPDUsResponse):
     def __init__(self, data):
         super().__init__(data)
         self.summary = "Application acknowledges the request to exit"
+
+    def __str__(self):
+        return "\n".join([
+            super().__str__(),
+        ])
+
+
+class OpenApplicationCommand(DefaultAPDUsCommand):
+    def __init__(self, data: bytes):
+        super().__init__(data)
+        self.summary = "Request application opening from Dashboard"
+        self.name_length = data[4]
+        self.name = data[4:]
+
+    @property
+    def next(self):
+        return OpenApplicationResponse
+
+    def __str__(self):
+        return "\n".join([
+            super().__str__(),
+            item_str(1, "Name length", self.name_length),
+            item_str(1, "Name", f"'{self.name.decode()}'"),
+        ])
+
+
+class OpenApplicationResponse(DefaultAPDUsResponse):
+    def __init__(self, data):
+        super().__init__(data)
+        self.summary = "Dashboard acknowledges the request to open the application"
 
     def __str__(self):
         return "\n".join([
