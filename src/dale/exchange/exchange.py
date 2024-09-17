@@ -163,20 +163,23 @@ class ExchangeMemory:
 class ExchangeFactory(Factory):
     memory = ExchangeMemory()
 
-    def is_recognized(self, data: bytes, last_one_recognized: bool) -> bool:
+    def is_recognized(self, data: bytes, hint_chaining: bool) -> (bool, bool):
         if data[0] != EXCHANGE_CLA:
-            return False
+            return (False, False)
         if len(data) <= 1:
-            return False
+            return (False, False)
 
         ins = data[1]
         if not valid_ins(ins):
-            return False
+            return (False, False)
         elif ins == Ins.GET_VERSION_COMMAND or ins == Ins.START_NEW_TRANSACTION_COMMAND:
-            return (data[4] == 0x00)
+            # If data is coherent, claim this one and hint claim for following commands
+            return ((data[4] == 0x00), (data[4] == 0x00))
+        elif not hint_chaining:
+            return (False, False)
         else:
-            # Don't match not entry-point INS that come out of nowhere, they are probably not for us
-            return last_one_recognized
+            # We are currently chain claiming APDUs, relinquish claim on the final one
+            return (True, ins != Ins.START_SIGNING_TRANSACTION)
 
     def translate_command(self, data: bytes) -> Command:
         ins = data[1]

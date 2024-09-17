@@ -43,13 +43,13 @@ def default_ins_to_text(cla: int, ins: int) -> str:
 
 class DefaultAPDUsFactory(Factory):
 
-    def is_recognized(self, data: bytes, last_one_recognized: bool) -> bool:
+    def is_recognized(self, data: bytes, hint_chaining: bool) -> (bool, bool):
         cla = data[0]
         ins = data[1]
         if not is_valid_default_ins(cla, ins):
-            return False
+            return (False, False)
         else:
-            return True
+            return (True, False)
 
     def translate_command(self, data: bytes) -> Command:
         cla = data[0]

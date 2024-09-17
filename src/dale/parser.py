@@ -33,7 +33,7 @@ class DefaultAPDUParser(APDUParser):
         super().__init__(factories)
         self._pending: Optional[Command] = None
         self._conversation: List[APDUPair] = list()
-        self._last_factory: Optional[Factory] = None
+        self._hint_chaining = False
 
     @property
     def conversation(self) -> Tuple[APDUPair, ...]:
@@ -62,8 +62,9 @@ class DefaultAPDUParser(APDUParser):
                     logging.warning(f"Invalid command with only {len(data)} bytes, header is 5")
                 else:
                     for f in self._factories:
-                        if f.is_recognized(data=data, last_one_recognized=(self._last_factory == f)):
-                            self._last_factory = f
+                        (is_claimed, hint_chaining) = f.is_recognized(data=data, hint_chaining=self._hint_chaining)
+                        if is_claimed:
+                            self._hint_chaining = hint_chaining
                             self._pending = f.translate_command(data=data)
                             break
             except AssertionError as e:

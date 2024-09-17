@@ -54,8 +54,8 @@ class Response:
 
 
 class Factory:
-    def is_recognized(self, data: bytes, last_one_recognized: bool) -> bool:
-        return True
+    def is_recognized(self, data: bytes, hint_chaining: bool) -> (bool, bool):
+        return (True, False)
 
     def translate_command(self, data: bytes) -> Command:
         return Command(data)
