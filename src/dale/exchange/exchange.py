@@ -479,23 +479,39 @@ class ProcessTransactionCommand(ExchangeCommand):
             if self.is_swap:
                 ret = [
                     item_str(2, "payin_address", self.decoded_payload.payin_address),
+                    item_str(2, "payin_extra_id", self.decoded_payload.payin_extra_id),
+                    item_str(2, "payin_extra_data", bytes_to_raw_str(self.decoded_payload.payin_extra_data)),
+                ]
+                if self.decoded_payload.payin_extra_id != "" and self.decoded_payload.payin_extra_data != b'':
+                    ret += [title(3, "warning: using both payin_extra_id and payin_extra_data is not valid")]
+                if len(self.decoded_payload.payin_extra_data) > 0:
+                    if len(self.decoded_payload.payin_extra_data) != 33:
+                        ret += [title(3, "warning: payin_extra_data should be empty or 33 bytes")]
+                    else:
+                        ret += [item_str(3, "header", self.decoded_payload.payin_extra_data[0])]
+                        ret += [item_str(3, "signature", bytes_to_raw_str(self.decoded_payload.payin_extra_data[1:]))]
+                ret += [
                     item_str(2, "refund_address", self.decoded_payload.refund_address),
+                    item_str(2, "refund_extra_id", self.decoded_payload.refund_extra_id),
                     item_str(2, "payout_address", self.decoded_payload.payout_address),
+                    item_str(2, "payout_extra_id", self.decoded_payload.payout_extra_id),
                     item_str(2, "currency_from", self.decoded_payload.currency_from),
                     item_str(2, "currency_to", self.decoded_payload.currency_to),
-                    item_str(2, "amount_to_provider", int.from_bytes(self.decoded_payload.amount_to_provider, 'big')),
-                    item_str(2, "amount_to_wallet", int.from_bytes(self.decoded_payload.amount_to_wallet, 'big')),
+                    item_str(2, "amount_to_provider", bytes_to_raw_str(self.decoded_payload.amount_to_provider)),
+                    item_str(3, "as int", int.from_bytes(self.decoded_payload.amount_to_provider, 'big')),
+                    item_str(2, "amount_to_wallet", bytes_to_raw_str(self.decoded_payload.amount_to_wallet)),
+                    item_str(3, "as int", int.from_bytes(self.decoded_payload.amount_to_wallet, 'big')),
+                    item_str(2, "device_transaction_id", self.decoded_payload.device_transaction_id),
+                    item_str(2, "device_transaction_id_ng", bytes_to_raw_str(self.decoded_payload.device_transaction_id_ng)),
                 ]
-                if self.is_legacy:
-                    ret += [item_str(2, "device_transaction_id", self.decoded_payload.device_transaction_id)]
-                else:
-                    ret += [item_str(2, "device_transaction_id_ng",
-                                        bytes_to_raw_str(self.decoded_payload.device_transaction_id_ng))]
+                if self.decoded_payload.device_transaction_id != "" and self.decoded_payload.device_transaction_id_ng != b'':
+                    ret += [title(3, "warning: using both device_transaction_id and device_transaction_id_ng is not valid")]
             elif self.is_sell:
                 ret = [
                     item_str(2, "trader_email", self.decoded_payload.trader_email),
                     item_str(2, "in_currency", self.decoded_payload.in_currency),
-                    item_str(2, "in_amount", int.from_bytes(self.decoded_payload.in_amount, 'big')),
+                    item_str(2, "in_amount", bytes_to_raw_str(self.decoded_payload.in_amount)),
+                    item_str(3, "as int", int.from_bytes(self.decoded_payload.in_amount, 'big')),
                     item_str(2, "in_address", self.decoded_payload.in_address),
                     item_str(2, "out_currency", self.decoded_payload.out_currency),
                     item_str(2, "out_amount", self.decoded_payload.out_amount),
@@ -506,7 +522,8 @@ class ProcessTransactionCommand(ExchangeCommand):
                     item_str(2, "user_id", self.decoded_payload.user_id),
                     item_str(2, "account_name", self.decoded_payload.account_name),
                     item_str(2, "in_currency", self.decoded_payload.in_currency),
-                    item_str(2, "in_amount", int.from_bytes(self.decoded_payload.in_amount, 'big')),
+                    item_str(2, "in_amount", bytes_to_raw_str(self.decoded_payload.in_amount)),
+                    item_str(3, "as int", int.from_bytes(self.decoded_payload.in_amount, 'big')),
                     item_str(2, "in_address", self.decoded_payload.in_address),
                     item_str(2, "device_transaction_id", bytes_to_raw_str(self.decoded_payload.device_transaction_id)),
                 ]
@@ -550,7 +567,8 @@ class ProcessTransactionCommand(ExchangeCommand):
             # Fees
             strings += [
                 item_str(1, "Fees length", self.fees_length),
-                item_str(1, "Fees", int.from_bytes(self.fees, 'big')),
+                item_str(1, "Fees", bytes_to_raw_str(self.fees)),
+                item_str(2, "as int", int.from_bytes(self.fees, 'big')),
             ]
             return "\n".join(strings)
 
