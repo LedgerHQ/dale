@@ -27,7 +27,9 @@ class Ins(IntEnum):
     CHECK_TRANSACTION_SIGNATURE_COMMAND  = 0x07
     CHECK_PAYOUT_ADDRESS                 = 0x08
     CHECK_ASSET_IN                       = 0x0B
-    CHECK_REFUND_ADDRESS                 = 0x09
+    CHECK_REFUND_ADDRESS_AND_DISPLAY     = 0x09
+    CHECK_REFUND_ADDRESS_NO_DISPLAY      = 0x0C
+    PROMPT_UI_DISPLAY                    = 0x0F
     START_SIGNING_TRANSACTION            = 0x0A
 
 
@@ -48,7 +50,9 @@ INS = {
     int(Ins.CHECK_TRANSACTION_SIGNATURE_COMMAND):  'CHECK_TRANSACTION_SIGNATURE',
     int(Ins.CHECK_PAYOUT_ADDRESS):                 'CHECK_PAYOUT_ADDRESS',
     int(Ins.CHECK_ASSET_IN):                       'CHECK_ASSET_IN',
-    int(Ins.CHECK_REFUND_ADDRESS):                 'CHECK_REFUND_ADDRESS',
+    int(Ins.CHECK_REFUND_ADDRESS_AND_DISPLAY):     'CHECK_REFUND_ADDRESS_AND_DISPLAY',
+    int(Ins.CHECK_REFUND_ADDRESS_NO_DISPLAY):      'CHECK_REFUND_ADDRESS_NO_DISPLAY',
+    int(Ins.PROMPT_UI_DISPLAY):                    'PROMPT_UI_DISPLAY',
     int(Ins.START_SIGNING_TRANSACTION):            'START_SIGNING_TRANSACTION'
 }
 
@@ -190,10 +194,14 @@ class ExchangeFactory(Factory):
             return CheckTransactionSignatureCommand(data, self.memory)
         elif ins == Ins.CHECK_PAYOUT_ADDRESS:
             return CheckPayoutAddress(data, self.memory)
-        elif ins == Ins.CHECK_REFUND_ADDRESS:
-            return CheckRefundAddress(data, self.memory)
+        elif ins == Ins.CHECK_REFUND_ADDRESS_AND_DISPLAY:
+            return CheckRefundAddressAndDisplay(data, self.memory)
         elif ins == Ins.CHECK_ASSET_IN:
             return CheckAssetIn(data, self.memory)
+        elif ins == Ins.CHECK_REFUND_ADDRESS_NO_DISPLAY:
+            return CheckRefundAddressNoDisplay(data, self.memory)
+        elif ins == Ins.PROMPT_UI_DISPLAY:
+            return PromptUIDisplay(data, self.memory)
         elif ins == Ins.START_SIGNING_TRANSACTION:
             return StartSigningTransaction(data, self.memory)
         else:
@@ -769,8 +777,20 @@ class CheckAssetIn(CheckAddress):
     summary = "Configuration for TO currency"
 
 
-class CheckRefundAddress(CheckAddress):
+class CheckRefundAddressAndDisplay(CheckAddress):
+    summary = "Configuration for FROM currency. Start UI display if success."
+
+
+class CheckRefundAddressNoDisplay(CheckAddress):
     summary = "Configuration for FROM currency"
+
+
+class PromptUIDisplay(ExchangeCommand):
+    def __str__(self):
+        return "\n".join([
+            super().__str__(),
+            summary("Request the UI display"),
+        ])
 
 
 class StartSigningTransaction(ExchangeCommand):
