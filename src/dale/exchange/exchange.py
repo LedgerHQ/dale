@@ -720,10 +720,14 @@ class CheckAddress(ExchangeCommand):
 
         self.ticker_length, self.ticker, remaining_conf = lv_digest(self.configuration)
         self.appname_length, self.appname, remaining_conf = lv_digest(remaining_conf)
-        self.subconfiguration_length, subconfig, remaining_conf = lv_digest(remaining_conf)
+        self.subconfiguration_length, self.subconfig, remaining_conf = lv_digest(remaining_conf)
         if self.subconfiguration_length > 0:
-            self.subticker_length, self.subticker, remaining_subconf = lv_digest(subconfig)
-            self.coefficient, remaining_subconf = l_digest(remaining_subconf)
+            self.subticker_length, self.subticker, remaining_subconf = lv_digest(self.subconfig)
+            if len(remaining_subconf) > 0:
+                self.subconf_has_coefficient = True
+                self.coefficient, remaining_subconf = l_digest(remaining_subconf)
+            else:
+                self.subconf_has_coefficient = False
 
         self.signature_header, remaining_apdu = l_digest(remaining_apdu)
         self.signature_length, self.signature, remaining_apdu = lv_digest(remaining_apdu)
@@ -758,10 +762,14 @@ class CheckAddress(ExchangeCommand):
             ]
             if self.subconfiguration_length > 0:
                 strings += [
+                    item_str(3, "Raw subconfiguration", self.subconfig),
                     item_str(3, "Subticker length", self.subticker_length),
                     item_str(3, "Subticker", self.subticker.decode()),
-                    item_str(3, "Subconfiguration coefficient", self.coefficient),
                 ]
+                if self.subconf_has_coefficient:
+                    strings += [
+                        item_str(3, "Subconfiguration coefficient", self.coefficient),
+                    ]
             strings += [
                 "",
                 item_str(1, "Coin configuration signature header", self.signature_header),
