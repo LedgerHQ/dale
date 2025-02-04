@@ -1,7 +1,7 @@
 import struct
 from enum import IntEnum
 from base64 import urlsafe_b64decode
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from ecdsa import curves
 from ecdsa.curves import Curve
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
@@ -167,7 +167,7 @@ class ExchangeMemory:
 class ExchangeFactory(Factory):
     memory = ExchangeMemory()
 
-    def is_recognized(self, data: bytes, hint_chaining: bool) -> (bool, bool):
+    def is_recognized(self, data: bytes, hint_chaining: bool) -> Tuple[bool, bool]:
         if data[0] != EXCHANGE_CLA:
             return (False, False)
         if len(data) <= 1:
@@ -461,21 +461,21 @@ class ProcessTransactionCommand(ExchangeCommand):
 
     def decode_pb(self):
         self.urlsafe_decoded = None
-        self.decoded_payload = None
+        self.decoded = None
         # Global try catch in case urlsafe_b64decode or PB throws
         try:
             if self.format_int == int(PayloadEncoding.BYTES_ARRAY):
                 self.urlsafe_decoded = self.payload
-                self.decoded_payload = NewTransactionResponse.FromString(self.urlsafe_decoded)
+                self.decoded = NewTransactionResponse.FromString(self.urlsafe_decoded)
             elif self.format_int == int(PayloadEncoding.BASE_64_URL):
                 # Add sufficient padding to decode
                 self.urlsafe_decoded = urlsafe_b64decode(self.payload + b'==')
                 if self.is_swap:
-                    self.decoded_payload = NewTransactionResponse.FromString(self.urlsafe_decoded)
+                    self.decoded = NewTransactionResponse.FromString(self.urlsafe_decoded)
                 elif self.is_sell:
-                    self.decoded_payload = NewSellResponse.FromString(self.urlsafe_decoded)
+                    self.decoded = NewSellResponse.FromString(self.urlsafe_decoded)
                 elif self.is_fund:
-                    self.decoded_payload = NewFundResponse.FromString(self.urlsafe_decoded)
+                    self.decoded = NewFundResponse.FromString(self.urlsafe_decoded)
         except Exception:
             pass
 
@@ -490,57 +490,57 @@ class ProcessTransactionCommand(ExchangeCommand):
 
     @property
     def decoded_pb(self) -> List[str]:
-        if self.decoded_payload is not None:
+        if self.decoded is not None:
             if self.is_swap:
                 ret = [
-                    item_str(2, "payin_address", self.decoded_payload.payin_address),
-                    item_str(2, "payin_extra_id", self.decoded_payload.payin_extra_id),
-                    item_str(2, "payin_extra_data", bytes_to_raw_str(self.decoded_payload.payin_extra_data)),
+                    item_str(2, "payin_address", self.decoded.payin_address),
+                    item_str(2, "payin_extra_id", self.decoded.payin_extra_id),
+                    item_str(2, "payin_extra_data", bytes_to_raw_str(self.decoded.payin_extra_data)),
                 ]
-                if self.decoded_payload.payin_extra_id != "" and self.decoded_payload.payin_extra_data != b'':
+                if self.decoded.payin_extra_id != "" and self.decoded.payin_extra_data != b'':
                     ret += [title(3, "warning: using both payin_extra_id and payin_extra_data is not valid")]
-                if len(self.decoded_payload.payin_extra_data) > 0:
-                    if len(self.decoded_payload.payin_extra_data) != 33:
+                if len(self.decoded.payin_extra_data) > 0:
+                    if len(self.decoded.payin_extra_data) != 33:
                         ret += [title(3, "warning: payin_extra_data should be empty or 33 bytes")]
                     else:
-                        ret += [item_str(3, "header", self.decoded_payload.payin_extra_data[0])]
-                        ret += [item_str(3, "signature", bytes_to_raw_str(self.decoded_payload.payin_extra_data[1:]))]
+                        ret += [item_str(3, "header", self.decoded.payin_extra_data[0])]
+                        ret += [item_str(3, "signature", bytes_to_raw_str(self.decoded.payin_extra_data[1:]))]
                 ret += [
-                    item_str(2, "refund_address", self.decoded_payload.refund_address),
-                    item_str(2, "refund_extra_id", self.decoded_payload.refund_extra_id),
-                    item_str(2, "payout_address", self.decoded_payload.payout_address),
-                    item_str(2, "payout_extra_id", self.decoded_payload.payout_extra_id),
-                    item_str(2, "currency_from", self.decoded_payload.currency_from),
-                    item_str(2, "currency_to", self.decoded_payload.currency_to),
-                    item_str(2, "amount_to_provider", bytes_to_raw_str(self.decoded_payload.amount_to_provider)),
-                    item_str(3, "as int", int.from_bytes(self.decoded_payload.amount_to_provider, 'big')),
-                    item_str(2, "amount_to_wallet", bytes_to_raw_str(self.decoded_payload.amount_to_wallet)),
-                    item_str(3, "as int", int.from_bytes(self.decoded_payload.amount_to_wallet, 'big')),
-                    item_str(2, "device_transaction_id", self.decoded_payload.device_transaction_id),
-                    item_str(2, "device_transaction_id_ng", bytes_to_raw_str(self.decoded_payload.device_transaction_id_ng)),
+                    item_str(2, "refund_address", self.decoded.refund_address),
+                    item_str(2, "refund_extra_id", self.decoded.refund_extra_id),
+                    item_str(2, "payout_address", self.decoded.payout_address),
+                    item_str(2, "payout_extra_id", self.decoded.payout_extra_id),
+                    item_str(2, "currency_from", self.decoded.currency_from),
+                    item_str(2, "currency_to", self.decoded.currency_to),
+                    item_str(2, "amount_to_provider", bytes_to_raw_str(self.decoded.amount_to_provider)),
+                    item_str(3, "as int", int.from_bytes(self.decoded.amount_to_provider, 'big')),
+                    item_str(2, "amount_to_wallet", bytes_to_raw_str(self.decoded.amount_to_wallet)),
+                    item_str(3, "as int", int.from_bytes(self.decoded.amount_to_wallet, 'big')),
+                    item_str(2, "device_transaction_id", self.decoded.device_transaction_id),
+                    item_str(2, "device_transaction_id_ng", bytes_to_raw_str(self.decoded.device_transaction_id_ng)),
                 ]
-                if self.decoded_payload.device_transaction_id != "" and self.decoded_payload.device_transaction_id_ng != b'':
-                    ret += [title(3, "warning: using both device_transaction_id and device_transaction_id_ng is not valid")]
+                if self.decoded.device_transaction_id != "" and self.decoded.device_transaction_id_ng != b'':
+                    ret += [title(3, "/!\\ using both device_transaction_id and device_transaction_id_ng is invalid")]
             elif self.is_sell:
                 ret = [
-                    item_str(2, "trader_email", self.decoded_payload.trader_email),
-                    item_str(2, "in_currency", self.decoded_payload.in_currency),
-                    item_str(2, "in_amount", bytes_to_raw_str(self.decoded_payload.in_amount)),
-                    item_str(3, "as int", int.from_bytes(self.decoded_payload.in_amount, 'big')),
-                    item_str(2, "in_address", self.decoded_payload.in_address),
-                    item_str(2, "out_currency", self.decoded_payload.out_currency),
-                    item_str(2, "out_amount", self.decoded_payload.out_amount),
-                    item_str(2, "device_transaction_id", bytes_to_raw_str(self.decoded_payload.device_transaction_id)),
+                    item_str(2, "trader_email", self.decoded.trader_email),
+                    item_str(2, "in_currency", self.decoded.in_currency),
+                    item_str(2, "in_amount", bytes_to_raw_str(self.decoded.in_amount)),
+                    item_str(3, "as int", int.from_bytes(self.decoded.in_amount, 'big')),
+                    item_str(2, "in_address", self.decoded.in_address),
+                    item_str(2, "out_currency", self.decoded.out_currency),
+                    item_str(2, "out_amount", self.decoded.out_amount),
+                    item_str(2, "device_transaction_id", bytes_to_raw_str(self.decoded.device_transaction_id)),
                 ]
             elif self.is_fund:
                 ret = [
-                    item_str(2, "user_id", self.decoded_payload.user_id),
-                    item_str(2, "account_name", self.decoded_payload.account_name),
-                    item_str(2, "in_currency", self.decoded_payload.in_currency),
-                    item_str(2, "in_amount", bytes_to_raw_str(self.decoded_payload.in_amount)),
-                    item_str(3, "as int", int.from_bytes(self.decoded_payload.in_amount, 'big')),
-                    item_str(2, "in_address", self.decoded_payload.in_address),
-                    item_str(2, "device_transaction_id", bytes_to_raw_str(self.decoded_payload.device_transaction_id)),
+                    item_str(2, "user_id", self.decoded.user_id),
+                    item_str(2, "account_name", self.decoded.account_name),
+                    item_str(2, "in_currency", self.decoded.in_currency),
+                    item_str(2, "in_amount", bytes_to_raw_str(self.decoded.in_amount)),
+                    item_str(3, "as int", int.from_bytes(self.decoded.in_amount, 'big')),
+                    item_str(2, "in_address", self.decoded.in_address),
+                    item_str(2, "device_transaction_id", bytes_to_raw_str(self.decoded.device_transaction_id)),
                 ]
         else:
             ret = [

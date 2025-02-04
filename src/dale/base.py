@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -54,7 +54,7 @@ class Response:
 
 
 class Factory:
-    def is_recognized(self, data: bytes, hint_chaining: bool) -> (bool, bool):
+    def is_recognized(self, data: bytes, hint_chaining: bool) -> Tuple[bool, bool]:
         return (True, False)
 
     def translate_command(self, data: bytes) -> Command:

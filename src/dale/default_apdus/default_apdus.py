@@ -1,4 +1,5 @@
 from dale.base import Command, Response, Factory
+from typing import Tuple
 
 from ..utils import lv_digest, l_digest
 from ..display import summary, item_str
@@ -43,7 +44,7 @@ def default_ins_to_text(cla: int, ins: int) -> str:
 
 class DefaultAPDUsFactory(Factory):
 
-    def is_recognized(self, data: bytes, hint_chaining: bool) -> (bool, bool):
+    def is_recognized(self, data: bytes, hint_chaining: bool) -> Tuple[bool, bool]:
         cla = data[0]
         ins = data[1]
         if not is_valid_default_ins(cla, ins):
