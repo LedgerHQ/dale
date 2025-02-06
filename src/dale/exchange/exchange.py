@@ -27,6 +27,7 @@ class Ins(IntEnum):
     CHECK_TRANSACTION_SIGNATURE_COMMAND  = 0x07
     CHECK_PAYOUT_ADDRESS                 = 0x08
     CHECK_ASSET_IN                       = 0x0B
+    CHECK_ASSET_IN_NO_DISPLAY            = 0x0D
     CHECK_REFUND_ADDRESS_AND_DISPLAY     = 0x09
     CHECK_REFUND_ADDRESS_NO_DISPLAY      = 0x0C
     PROMPT_UI_DISPLAY                    = 0x0F
@@ -50,6 +51,7 @@ INS = {
     int(Ins.CHECK_TRANSACTION_SIGNATURE_COMMAND):  'CHECK_TRANSACTION_SIGNATURE',
     int(Ins.CHECK_PAYOUT_ADDRESS):                 'CHECK_PAYOUT_ADDRESS',
     int(Ins.CHECK_ASSET_IN):                       'CHECK_ASSET_IN',
+    int(Ins.CHECK_ASSET_IN_NO_DISPLAY):            'CHECK_ASSET_IN_NO_DISPLAY',
     int(Ins.CHECK_REFUND_ADDRESS_AND_DISPLAY):     'CHECK_REFUND_ADDRESS_AND_DISPLAY',
     int(Ins.CHECK_REFUND_ADDRESS_NO_DISPLAY):      'CHECK_REFUND_ADDRESS_NO_DISPLAY',
     int(Ins.PROMPT_UI_DISPLAY):                    'PROMPT_UI_DISPLAY',
@@ -204,6 +206,8 @@ class ExchangeFactory(Factory):
         elif ins == Ins.CHECK_REFUND_ADDRESS_AND_DISPLAY:
             return CheckRefundAddressAndDisplay(data, self.memory)
         elif ins == Ins.CHECK_ASSET_IN:
+            return CheckAssetIn(data, self.memory)
+        elif ins == Ins.CHECK_ASSET_IN_NO_DISPLAY:
             return CheckAssetIn(data, self.memory)
         elif ins == Ins.CHECK_REFUND_ADDRESS_NO_DISPLAY:
             return CheckRefundAddressNoDisplay(data, self.memory)
@@ -769,6 +773,10 @@ class CheckAddress(ExchangeCommand):
                 if self.subconf_has_coefficient:
                     strings += [
                         item_str(3, "Subconfiguration coefficient", self.coefficient),
+                    ]
+                else:
+                    strings += [
+                        title(3, "Subconfiguration does not have a coefficient"),
                     ]
             strings += [
                 "",
