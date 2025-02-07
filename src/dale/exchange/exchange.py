@@ -27,6 +27,7 @@ class Ins(IntEnum):
     CHECK_TRANSACTION_SIGNATURE_COMMAND  = 0x07
     CHECK_PAYOUT_ADDRESS                 = 0x08
     CHECK_ASSET_IN                       = 0x0B
+    CHECK_ASSET_IN_NO_DISPLAY            = 0x0D
     CHECK_REFUND_ADDRESS_AND_DISPLAY     = 0x09
     CHECK_REFUND_ADDRESS_NO_DISPLAY      = 0x0C
     PROMPT_UI_DISPLAY                    = 0x0F
@@ -50,6 +51,7 @@ INS = {
     int(Ins.CHECK_TRANSACTION_SIGNATURE_COMMAND):  'CHECK_TRANSACTION_SIGNATURE',
     int(Ins.CHECK_PAYOUT_ADDRESS):                 'CHECK_PAYOUT_ADDRESS',
     int(Ins.CHECK_ASSET_IN):                       'CHECK_ASSET_IN',
+    int(Ins.CHECK_ASSET_IN_NO_DISPLAY):            'CHECK_ASSET_IN_NO_DISPLAY',
     int(Ins.CHECK_REFUND_ADDRESS_AND_DISPLAY):     'CHECK_REFUND_ADDRESS_AND_DISPLAY',
     int(Ins.CHECK_REFUND_ADDRESS_NO_DISPLAY):      'CHECK_REFUND_ADDRESS_NO_DISPLAY',
     int(Ins.PROMPT_UI_DISPLAY):                    'PROMPT_UI_DISPLAY',
@@ -204,6 +206,8 @@ class ExchangeFactory(Factory):
         elif ins == Ins.CHECK_REFUND_ADDRESS_AND_DISPLAY:
             return CheckRefundAddressAndDisplay(data, self.memory)
         elif ins == Ins.CHECK_ASSET_IN:
+            return CheckAssetIn(data, self.memory)
+        elif ins == Ins.CHECK_ASSET_IN_NO_DISPLAY:
             return CheckAssetIn(data, self.memory)
         elif ins == Ins.CHECK_REFUND_ADDRESS_NO_DISPLAY:
             return CheckRefundAddressNoDisplay(data, self.memory)
@@ -720,10 +724,14 @@ class CheckAddress(ExchangeCommand):
 
         self.ticker_length, self.ticker, remaining_conf = lv_digest(self.configuration)
         self.appname_length, self.appname, remaining_conf = lv_digest(remaining_conf)
-        self.subconfiguration_length, subconfig, remaining_conf = lv_digest(remaining_conf)
+        self.subconfiguration_length, self.subconfig, remaining_conf = lv_digest(remaining_conf)
         if self.subconfiguration_length > 0:
-            self.subticker_length, self.subticker, remaining_subconf = lv_digest(subconfig)
-            self.coefficient, remaining_subconf = l_digest(remaining_subconf)
+            self.subticker_length, self.subticker, remaining_subconf = lv_digest(self.subconfig)
+            if len(remaining_subconf) > 0:
+                self.subconf_has_coefficient = True
+                self.coefficient, remaining_subconf = l_digest(remaining_subconf)
+            else:
+                self.subconf_has_coefficient = False
 
         self.signature_header, remaining_apdu = l_digest(remaining_apdu)
         self.signature_length, self.signature, remaining_apdu = lv_digest(remaining_apdu)
@@ -758,10 +766,18 @@ class CheckAddress(ExchangeCommand):
             ]
             if self.subconfiguration_length > 0:
                 strings += [
+                    item_str(3, "Raw subconfiguration", self.subconfig),
                     item_str(3, "Subticker length", self.subticker_length),
                     item_str(3, "Subticker", self.subticker.decode()),
-                    item_str(3, "Subconfiguration coefficient", self.coefficient),
                 ]
+                if self.subconf_has_coefficient:
+                    strings += [
+                        item_str(3, "Subconfiguration coefficient", self.coefficient),
+                    ]
+                else:
+                    strings += [
+                        title(3, "Subconfiguration does not have a coefficient"),
+                    ]
             strings += [
                 "",
                 item_str(1, "Coin configuration signature header", self.signature_header),
