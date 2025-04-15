@@ -29,3 +29,22 @@ positional arguments:
 optional arguments:
   -h, --help  show this help message and exit
 ```
+
+## File format
+
+DALE reads APDU files with the following content:
+```
+# Comment
+=> <APDU>
+<= <RAPDU>
+# Example
+=> e003000500102020
+<= 9000
+```
+
+DALE can also extract the APDU content from Ledger Live logs.
+
+### Reverted logs
+
+Warning: sometimes the Ledger Live does not record the APDU logs in the correct order.
+If you encounter errors using DALE while decoding logs you may try to use the `--reverse` command line option. 
