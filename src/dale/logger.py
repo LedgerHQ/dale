@@ -43,7 +43,22 @@ def main():
 
             # Extract the APDUs from the log
             # get the "message" field from each entry where the "type" is "apdu"
-            apdus = list(map(lambda x: x["message"], filter(lambda x: x.get("type", "") == "apdu", entries)))
+            rawApdus = list(
+                map(
+                    lambda x: x["message"],
+                    filter(lambda x: x.get("type", "") == "apdu" or x.get("type", "") == "live-dmk-tracer", entries)
+                )
+            )
+            apdus = list()
+            for apdu in rawApdus:
+                # Ledger Live logs APDUs as hex strings, so we need to convert them to bytes
+                if apdu.startswith("[exchange] "):
+                    apdu = apdu[11:]
+                try:
+                    apdus.append(bytes.fromhex(apdu))
+                except ValueError as e:
+                    logging.error(f"Invalid APDU format: {apdu}. Error: {e}")
+                    continue
     else:
         logging.info("Reading raw APDU file")
         with apdu_file.open() as file:
