@@ -2,6 +2,8 @@
 requires = [
     "setuptools>=42",
     "wheel",
-    "protobuf>=3.19",
+    "protobuf==3.19",
+    "ecdsa",
+    "cryptography",
 ]
 build-backend = "setuptools.build_meta"
