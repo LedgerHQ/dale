@@ -51,6 +51,9 @@ def main():
             for line in dmk_logs:
                 if line.startswith("[exchange] "):
                     apdus.append(line[len("[exchange] "):])
+                if line.startswith("=> ") or line.startswith("<= "):
+                    apdus.append(line)
+
     else:
         logging.info("Reading raw APDU file")
         with apdu_file.open() as file:
