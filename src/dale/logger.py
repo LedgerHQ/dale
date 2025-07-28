@@ -44,15 +44,18 @@ def main():
             # Extract the APDUs from the log
             # get the "message" field from each entry where the "type" is "apdu"
             dmk_logs = [
-                x["message"]
+                x
                 for x in entries
-                if x.get("type", "") == "live-dmk-tracer"
+                if x.get("type", "") == "live-dmk-tracer" or x.get("type", "") == "live-dmk-logger"
             ]
-            for line in dmk_logs:
-                if line.startswith("[exchange] "):
-                    apdus.append(line[len("[exchange] "):])
-                if line.startswith("=> ") or line.startswith("<= "):
-                    apdus.append(line)
+            for entry in dmk_logs:
+                if entry["message"] == "[sendApdu]":
+                    apdus.append("=> " + entry["data"]["data"]["apdu"]["hex"][len("0x"):])
+
+                elif entry["message"] == "Received APDU Response":
+                    data = entry["data"]["data"]["response"]["data"]["hex"][len("0x"):]
+                    status_code = entry["data"]["data"]["response"]["statusCode"]["hex"][len("0x"):]
+                    apdus.append("<= " + data + status_code)
 
     else:
         logging.info("Reading raw APDU file")
