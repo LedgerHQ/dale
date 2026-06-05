@@ -4,3 +4,8 @@ __pychache__
 *pyc
 *~
 build/
+
+# Generated during the local site serve
+site/dale
+site/manifest.txt
+site/requirements.txt
