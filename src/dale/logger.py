@@ -24,10 +24,54 @@ def init_parser() -> ArgumentParser:
     return parser
 
 
+# Extract APDU lines from a Ledger Live JSON log
+def _extract_apdus_from_json(text: str) -> list[str]:
+    apdus: list[str] = []
+    entries = json.loads(text)
+    dmk_logs = [
+        x
+        for x in entries
+        if x.get("type", "") == "live-dmk-tracer" or x.get("type", "") == "live-dmk-logger"
+    ]
+    for entry in dmk_logs:
+        if entry["message"] == "[sendApdu]":
+            apdus.append("=> " + entry["data"]["data"]["apdu"]["hex"][len("0x"):])
+        elif entry["message"] == "Received APDU Response":
+            data = entry["data"]["data"]["response"]["data"]["hex"][len("0x"):]
+            status_code = entry["data"]["data"]["response"]["statusCode"]["hex"][len("0x"):]
+            apdus.append("<= " + data + status_code)
+    return apdus
+
+
+# Extract APDU lines from a raw text file
+def _extract_apdus_from_raw(text: str) -> list[str]:
+    return text.splitlines(keepends=True)
+
+
+# Core processing: takes raw file content as text, returns the decoded APDU output as a string
+def process_text(text: str, json_input: bool = False, reverse: bool = False) -> str:
+    if json_input:
+        apdus = _extract_apdus_from_json(text)
+    else:
+        apdus = _extract_apdus_from_raw(text)
+
+    if reverse:
+        apdus.reverse()
+
+    with DefaultAPDUParser([ExchangeFactory(), DefaultAPDUsFactory(), Factory()]) as apdu_parser:
+        for apdu in apdus:
+            apdu_parser.feed(apdu)
+
+    lines = [str(exchange) for exchange in apdu_parser.conversation]
+    lines.append('=' * 45)
+    lines.append('Finished.')
+    return '\n'.join(lines)
+
+
+# Entry point for the local python cli version
 def main():
     logging.root.setLevel(logging.INFO)
 
-    apdus: list[str] = []
     parser = init_parser()
     args = parser.parse_args()
     apdu_file = args.apdu_file.resolve()
@@ -35,47 +79,15 @@ def main():
         raise AssertionError(f"'{apdu_file}' does not exist or is not a file! Aborting")
     logging.info("Reading from %s", apdu_file)
 
-    # check if input file is Ledger Live log
-    if args.json_input:
-        logging.info("Parsing Ledger Live log file")
-        with apdu_file.open("r", encoding="utf8") as f:
-            entries = json.load(f)
+    with apdu_file.open("r", encoding="utf8") as f:
+        text = f.read()
 
-            # Extract the APDUs from the log
-            # get the "message" field from each entry where the "type" is "apdu"
-            dmk_logs = [
-                x
-                for x in entries
-                if x.get("type", "") == "live-dmk-tracer" or x.get("type", "") == "live-dmk-logger"
-            ]
-            for entry in dmk_logs:
-                if entry["message"] == "[sendApdu]":
-                    apdus.append("=> " + entry["data"]["data"]["apdu"]["hex"][len("0x"):])
+    print(process_text(text, json_input=args.json_input, reverse=args.reverse))
 
-                elif entry["message"] == "Received APDU Response":
-                    data = entry["data"]["data"]["response"]["data"]["hex"][len("0x"):]
-                    status_code = entry["data"]["data"]["response"]["statusCode"]["hex"][len("0x"):]
-                    apdus.append("<= " + data + status_code)
 
-    else:
-        logging.info("Reading raw APDU file")
-        with apdu_file.open() as file:
-            for line in file:
-                apdus.append(line)
-
-    if args.reverse:
-        logging.info("Reversing lines")
-        apdus.reverse()
-
-    with DefaultAPDUParser([ExchangeFactory(), DefaultAPDUsFactory(), Factory()]) as apdu_parser:
-        for apdu in apdus:
-            apdu_parser.feed(apdu)
-
-    for exchange in apdu_parser.conversation:
-        print(str(exchange))
-
-    print('=' * 45)
-    print('Finished.')
+# Entry point for the web version (called from Pyodide in index.html)
+def main_web(text: str, json_input: bool = False, reverse: bool = False) -> str:
+    return process_text(text, json_input=json_input, reverse=reverse)
 
 
 if __name__ == '__main__':
