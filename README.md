@@ -3,8 +3,9 @@
 This project aims at parsing all kind of APDU exchange files, and displaying
 them in a understandable fashion.
 
+Accessible at https://ledgerhq.github.io/dale/
 
-## Install
+## Local install
 
 From the top of the repo, given you have the right to install the package
 (either root or in a `virtualenv`):
@@ -47,4 +48,4 @@ DALE can also extract the APDU content from Ledger Live logs.
 ### Reverted logs
 
 Warning: sometimes the Ledger Live does not record the APDU logs in the correct order.
-If you encounter errors using DALE while decoding logs you may try to use the `--reverse` command line option. 
+If you encounter errors using DALE while decoding logs you may try to use the `--reverse` command line option.
