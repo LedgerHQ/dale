@@ -49,14 +49,9 @@ def _extract_apdus_from_raw(text: str) -> list[str]:
 # Detect if the input text is a Ledger Live JSON log
 def _is_json_input(text: str) -> bool:
     try:
-        entries = json.loads(text)
-        if not isinstance(entries, list):
-            return False
-        return any(
-            x.get("type", "") in ("live-dmk-tracer", "live-dmk-logger")
-            for x in entries
-        )
-    except (json.JSONDecodeError, AttributeError):
+        json.loads(text)
+        return True
+    except (json.JSONDecodeError, ValueError):
         return False
 
 
