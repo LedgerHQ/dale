@@ -12,6 +12,7 @@ from .pb import NewTransactionResponse, NewSellResponse, NewFundResponse
 from ..utils import lv_digest, l_digest, bytes_to_raw_str
 from ..display import summary, title, item_str
 from . import signature_tester as signature_tester
+from . import spec_tester as spec_tester
 
 CONFIGURATION_DER_SIGNATURE_LENGTH = 70
 
@@ -463,6 +464,15 @@ class ProcessTransactionCommand(ExchangeCommand):
     def size_of_payload_length_field(self) -> int:
         return (2 if self.is_ng else 1)
 
+    def spec_warning(self, message_name: str, field_name: str, value) -> List[str]:
+        result = spec_tester.check_field_size(message_name, field_name, value)
+        if result is None:
+            return []
+        actual_size, max_usable, is_over = result
+        if not is_over:
+            return []
+        return [title(3, f"/!\\ {field_name} is {actual_size} bytes, over spec max of {max_usable}")]
+
     def decode_pb(self):
         self.urlsafe_decoded = None
         self.decoded = None
@@ -498,8 +508,11 @@ class ProcessTransactionCommand(ExchangeCommand):
             if self.is_swap:
                 ret = [
                     item_str(2, "payin_address", self.decoded.payin_address),
+                    *self.spec_warning("NewTransactionResponse", "payin_address", self.decoded.payin_address),
                     item_str(2, "payin_extra_id", self.decoded.payin_extra_id),
+                    *self.spec_warning("NewTransactionResponse", "payin_extra_id", self.decoded.payin_extra_id),
                     item_str(2, "payin_extra_data", bytes_to_raw_str(self.decoded.payin_extra_data)),
+                    *self.spec_warning("NewTransactionResponse", "payin_extra_data", self.decoded.payin_extra_data),
                 ]
                 if self.decoded.payin_extra_id != "" and self.decoded.payin_extra_data != b'':
                     ret += [title(3, "warning: using both payin_extra_id and payin_extra_data is not valid")]
@@ -511,40 +524,65 @@ class ProcessTransactionCommand(ExchangeCommand):
                         ret += [item_str(3, "signature", bytes_to_raw_str(self.decoded.payin_extra_data[1:]))]
                 ret += [
                     item_str(2, "refund_address", self.decoded.refund_address),
+                    *self.spec_warning("NewTransactionResponse", "refund_address", self.decoded.refund_address),
                     item_str(2, "refund_extra_id", self.decoded.refund_extra_id),
+                    *self.spec_warning("NewTransactionResponse", "refund_extra_id", self.decoded.refund_extra_id),
                     item_str(2, "payout_address", self.decoded.payout_address),
+                    *self.spec_warning("NewTransactionResponse", "payout_address", self.decoded.payout_address),
                     item_str(2, "payout_extra_id", self.decoded.payout_extra_id),
+                    *self.spec_warning("NewTransactionResponse", "payout_extra_id", self.decoded.payout_extra_id),
                     item_str(2, "currency_from", self.decoded.currency_from),
+                    *self.spec_warning("NewTransactionResponse", "currency_from", self.decoded.currency_from),
                     item_str(2, "currency_to", self.decoded.currency_to),
+                    *self.spec_warning("NewTransactionResponse", "currency_to", self.decoded.currency_to),
                     item_str(2, "amount_to_provider", bytes_to_raw_str(self.decoded.amount_to_provider)),
+                    *self.spec_warning("NewTransactionResponse", "amount_to_provider", self.decoded.amount_to_provider),
                     item_str(3, "as int", int.from_bytes(self.decoded.amount_to_provider, 'big')),
                     item_str(2, "amount_to_wallet", bytes_to_raw_str(self.decoded.amount_to_wallet)),
+                    *self.spec_warning("NewTransactionResponse", "amount_to_wallet", self.decoded.amount_to_wallet),
                     item_str(3, "as int", int.from_bytes(self.decoded.amount_to_wallet, 'big')),
                     item_str(2, "device_transaction_id", self.decoded.device_transaction_id),
+                    *self.spec_warning("NewTransactionResponse", "device_transaction_id",
+                                       self.decoded.device_transaction_id),
                     item_str(2, "device_transaction_id_ng", bytes_to_raw_str(self.decoded.device_transaction_id_ng)),
+                    *self.spec_warning("NewTransactionResponse", "device_transaction_id_ng",
+                                       self.decoded.device_transaction_id_ng),
                 ]
                 if self.decoded.device_transaction_id != "" and self.decoded.device_transaction_id_ng != b'':
                     ret += [title(3, "/!\\ using both device_transaction_id and device_transaction_id_ng is invalid")]
             elif self.is_sell:
                 ret = [
                     item_str(2, "trader_email", self.decoded.trader_email),
+                    *self.spec_warning("NewSellResponse", "trader_email", self.decoded.trader_email),
                     item_str(2, "in_currency", self.decoded.in_currency),
+                    *self.spec_warning("NewSellResponse", "in_currency", self.decoded.in_currency),
                     item_str(2, "in_amount", bytes_to_raw_str(self.decoded.in_amount)),
+                    *self.spec_warning("NewSellResponse", "in_amount", self.decoded.in_amount),
                     item_str(3, "as int", int.from_bytes(self.decoded.in_amount, 'big')),
                     item_str(2, "in_address", self.decoded.in_address),
+                    *self.spec_warning("NewSellResponse", "in_address", self.decoded.in_address),
                     item_str(2, "out_currency", self.decoded.out_currency),
+                    *self.spec_warning("NewSellResponse", "out_currency", self.decoded.out_currency),
                     item_str(2, "out_amount", self.decoded.out_amount),
+                    *self.spec_warning("UDecimal", "coefficient", self.decoded.out_amount.coefficient),
                     item_str(2, "device_transaction_id", bytes_to_raw_str(self.decoded.device_transaction_id)),
+                    *self.spec_warning("NewSellResponse", "device_transaction_id", self.decoded.device_transaction_id),
                 ]
             elif self.is_fund:
                 ret = [
                     item_str(2, "user_id", self.decoded.user_id),
+                    *self.spec_warning("NewFundResponse", "user_id", self.decoded.user_id),
                     item_str(2, "account_name", self.decoded.account_name),
+                    *self.spec_warning("NewFundResponse", "account_name", self.decoded.account_name),
                     item_str(2, "in_currency", self.decoded.in_currency),
+                    *self.spec_warning("NewFundResponse", "in_currency", self.decoded.in_currency),
                     item_str(2, "in_amount", bytes_to_raw_str(self.decoded.in_amount)),
+                    *self.spec_warning("NewFundResponse", "in_amount", self.decoded.in_amount),
                     item_str(3, "as int", int.from_bytes(self.decoded.in_amount, 'big')),
                     item_str(2, "in_address", self.decoded.in_address),
+                    *self.spec_warning("NewFundResponse", "in_address", self.decoded.in_address),
                     item_str(2, "device_transaction_id", bytes_to_raw_str(self.decoded.device_transaction_id)),
+                    *self.spec_warning("NewFundResponse", "device_transaction_id", self.decoded.device_transaction_id),
                 ]
         else:
             ret = [
